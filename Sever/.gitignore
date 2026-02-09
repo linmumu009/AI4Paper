@@ -1,0 +1,60 @@
+### Python 缓存与编译产物
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+### C 扩展
+*.so
+*.dll
+
+### 虚拟环境
+.venv/
+venv/
+env/
+
+### 日志文件
+*.log
+logs/
+
+### 压缩包
+*.zip
+*.rar
+
+### PDF（运行产出与中间文件）
+*.pdf
+
+### 运行数据目录（可随时通过脚本重新生成）
+data/arxivList/
+data/paperList_remove_duplications/
+data/llm_select_theme/
+data/paper_theme_filter/
+data/raw_pdf/
+data/preview_pdf/
+data/preview_pdf_to_mineru/
+data/pdf_info/
+data/instutions_filter/
+data/selectedpaper/
+data/selectedpaper_to_mineru/
+data/paper_summary/
+data/summary_limit/
+data/select_image/
+data/file_collect/
+
+### 根目录临时/测试文件
+/test_*.py
+/test_*.ipynb
+/test_*.png
+
+### 配置文件备份（不进入仓库）
+config/config1.py
+config/config copy.py
+
+### 参考项目（无需纳入版本控制）
+reference/
+
+### IDE / 系统杂项
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

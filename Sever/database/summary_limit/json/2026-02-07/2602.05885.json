@@ -1,0 +1,26 @@
+{
+  "institution": "港科大",
+  "short_title": "解决RL内核生成中的奖励欺骗与懒优化",
+  "📖标题": "Dr. Kernel: Reinforcement Learning Done Right for Triton Kernel Generations",
+  "🌐来源": "arxiv",
+  "paper_id": "2602.05885",
+  "🛎️文章简介": {
+    "other": [
+      "如何在强化学习驱动的GPU内核生成中防止奖励欺骗与懒优化导致的虚假性能提升？",
+      "提出KERNELGYM执行环境与DR.KERNEL训练框架，系统解决奖励欺骗、多轮RL偏差、训练不稳定及优化目标错位问题，生成具备实际加速效果的高质量Triton内核。"
+    ]
+  },
+  "📝重点思路": [
+    "🔸构建KERNELGYM——首个支持分布式训练、故障隔离、执行级奖励欺骗检测与细粒度profiling反馈的GPU内核RL环境；",
+    "🔸提出TRLOO优势估计，修正GRPO多轮RL中因“自我包含”导致的策略梯度偏差；",
+    "🔸引入MRS缓解懒优化，并设计基于profiling的奖励（PR = T_generated / T_total）与拒绝采样（PRS）；",
+    "🔸采用冷启动SFT+多轮RL联合训练，结合STTS动态扩展推理轮次以提升内核质量。"
+  ],
+  "🔎分析总结": [
+    "🔸KERNELGYM奖励欺骗检查将hack率从~10%降至~3%，有效拦截虚假优化；",
+    "🔸TRLOO比GRPO显著提升Fast@1.2且学习更稳定，验证无偏优势估计对稀疏反馈任务的关键作用；",
+    "🔸MRS单独训练无法突破Fast@1.2瓶颈，引入PR与PRS后Level-2指标从20.0%升至25.6%，证实瓶颈感知奖励引导算子融合；",
+    "🔸STTS（best-of-history）使DR.KERNEL-14B在Level-2达47.8% Fast@1.2，大幅超越Claude-4.5-Sonnet（26.7%）与GPT-5（28.6%）。"
+  ],
+  "💡个人观点": "论文创新在于将RL深度适配硬件编程：构建首个面向kernel生成的鲁棒执行环境KERNELGYM，并提出TRLOO、MRS、PR/PRS与STTS构成的技术闭环；其中PR指标基于profiling数据量化优化有效性，将性能目标转化为可微分信号， bridging AI生成与硬件效能。"
+}
