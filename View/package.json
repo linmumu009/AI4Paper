@@ -1,0 +1,30 @@
+{
+  "name": "view",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.1.18",
+    "@vitejs/plugin-vue": "^6.0.4",
+    "tailwindcss": "^4.1.18",
+    "typescript": "~5.9.3",
+    "vite": "^7.3.1"
+  },
+  "dependencies": {
+    "@tiptap/extension-code-block-lowlight": "^3.19.0",
+    "@tiptap/extension-image": "^3.19.0",
+    "@tiptap/extension-link": "^3.19.0",
+    "@tiptap/extension-placeholder": "^3.19.0",
+    "@tiptap/starter-kit": "^3.19.0",
+    "@tiptap/vue-3": "^3.19.0",
+    "axios": "^1.13.5",
+    "lowlight": "^3.3.0",
+    "vue": "^3.5.27",
+    "vue-router": "^4.6.4"
+  }
+}
