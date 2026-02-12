@@ -1,7 +1,7 @@
 English | [中文](README.zh-CN.md)
 
 
-# ArxivPaper for LLM
+# AI4Papers for LLM
 
 ArxivPaper is an arXiv paper triage and rapid-reading pipeline designed for research/engineering teams.
 Within a specified time window, it pulls papers from arXiv, deduplicates them, then uses an LLM to score each paper for topic relevance and filters by a threshold. It then automatically downloads PDFs, generates preview pages, and extracts author affiliations from the previews to identify papers from “large institutions.” For the selected papers, it performs full-text parsing and generates Chinese summaries, and also produces a “cover page + result-figure digest” (multi-page PNGs with the same dimensions as the cover) for fast visual skimming. Finally, it collects and archives all artifacts (PDFs, summaries, images, etc.) per paper; pushing to Zotero is an optional final step.

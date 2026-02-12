@@ -58,6 +58,9 @@ export interface PapersResponse {
   date: string
   count: number
   papers: PaperSummary[]
+  total_available?: number
+  quota_limit?: number | null
+  tier?: UserTier | 'anonymous'
 }
 
 /** GET /api/papers/:id 响应 */
@@ -78,6 +81,9 @@ export interface DigestResponse {
   avg_relevance_score: number | null
   institution_distribution: { name: string; count: number }[]
   papers: PaperSummary[]
+  total_available?: number
+  quota_limit?: number | null
+  tier?: UserTier | 'anonymous'
 }
 
 /** Pipeline step status */
@@ -128,6 +134,25 @@ export interface KbNotesResponse {
   notes: KbNote[]
 }
 
+/** A PDF annotation (highlight / note) */
+export interface KbAnnotation {
+  id: number
+  paper_id: string
+  page: number
+  type: 'highlight' | 'text' | 'box'
+  content: string
+  color: string
+  position_data: string
+  created_at: string
+  updated_at: string
+}
+
+/** GET /api/kb/papers/:paper_id/annotations 响应 */
+export interface KbAnnotationsResponse {
+  paper_id: string
+  annotations: KbAnnotation[]
+}
+
 /** A folder in the knowledge base (recursive tree) */
 export interface KbFolder {
   id: number
@@ -150,4 +175,129 @@ export interface KbMenuItem {
   key: string
   label: string
   danger?: boolean
+}
+
+/** A saved compare analysis result */
+export interface KbCompareResult {
+  id: number
+  title: string
+  markdown: string
+  paper_ids: string[]
+  folder_id: number | null
+  created_at: string
+  updated_at: string
+}
+
+/** A folder in the compare results tree */
+export interface KbCompareFolder {
+  id: number
+  name: string
+  parent_id: number | null
+  children: KbCompareFolder[]
+  results: KbCompareResult[]
+  created_at: string
+  updated_at: string
+}
+
+/** GET /api/kb/compare-results/tree 响应 */
+export interface KbCompareResultsTree {
+  folders: KbCompareFolder[]
+  results: KbCompareResult[] // root-level results
+}
+
+// ---------------------------------------------------------------------------
+// Auth types
+// ---------------------------------------------------------------------------
+
+export interface AuthUser {
+  id: number
+  username: string
+  role: UserRole
+  tier: UserTier
+  created_at: string
+  updated_at: string
+  last_login_at?: string | null
+}
+
+export type UserRole = 'user' | 'admin' | 'superadmin'
+export type UserTier = 'free' | 'pro' | 'pro_plus'
+
+export interface AuthPayload {
+  username: string
+  password: string
+}
+
+export interface AuthActionResponse {
+  ok: boolean
+  user: AuthUser
+}
+
+export interface AuthMeResponse {
+  authenticated: boolean
+  user: AuthUser | null
+}
+
+export interface AuthLogoutResponse {
+  ok: boolean
+}
+
+export interface AdminUsersResponse {
+  users: AuthUser[]
+}
+
+// ---------------------------------------------------------------------------
+// Pipeline types
+// ---------------------------------------------------------------------------
+
+export interface PipelineRunStatus {
+  running: boolean
+  current_step: string | null
+  logs: string[]
+  started_at: string | null
+  finished_at: string | null
+  exit_code: number | null
+  params: {
+    pipeline?: string
+    date?: string
+    sllm?: number | null
+    zo?: string
+  }
+}
+
+export interface ScheduleConfig {
+  enabled: boolean
+  hour: number
+  minute: number
+  pipeline: string
+  sllm: number | null
+  zo: string
+  last_run_date?: string | null
+}
+
+// ---------------------------------------------------------------------------
+// System Config types
+// ---------------------------------------------------------------------------
+
+export interface SystemConfigItem {
+  key: string
+  value: any
+  type: string
+  description: string
+  is_sensitive: boolean
+}
+
+export interface SystemConfigGroup {
+  name: string
+  items: SystemConfigItem[]
+}
+
+export interface SystemConfigResponse {
+  ok: boolean
+  groups: SystemConfigGroup[]
+  defaults: Record<string, any>
+}
+
+export interface SystemConfigUpdateResponse {
+  ok: boolean
+  config: Record<string, any>
 }

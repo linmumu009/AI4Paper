@@ -22,8 +22,9 @@ SEARCH_CATEGORIES = ["cs.CL", "cs.LG", "cs.AI", "stat.ML"]
 # [Controller/arxiv_search.py] 请求 User-Agent
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0 Safari/537.36"
 
-# [全局] 数据根目录
-DATA_ROOT = "data"
+# [全局] 数据根目录 —— 基于本文件位置计算绝对路径，确保无论 CWD 在哪都指向 Sever/data
+_SEVER_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DATA_ROOT = os.path.join(_SEVER_DIR, "data")
 
 # [Controller/arxiv_search.py] 输出文件目录与文件名格式
 OUTPUT_DIR = os.path.join(DATA_ROOT, "arxivList", "md")
@@ -78,13 +79,13 @@ RESPECT_ENV_PROXIES = False
 # [全局] API KEY 配置项
 
 # [Controller/pdfsplite_to_minerU.py] minerU Token（请从环境变量 MINERU_TOKEN 读取，或在本地未提交文件中配置）
-minerU_Token = "eyJ0eXBlIjoiSldUIiwiYWxnIjoiSFM1MTIifQ.eyJqdGkiOiI3MTEwMDEwNCIsInJvbCI6IlJPTEVfUkVHSVNURVIiLCJpc3MiOiJPcGVuWExhYiIsImlhdCI6MTc2OTc2MTk5OSwiY2xpZW50SWQiOiJsa3pkeDU3bnZ5MjJqa3BxOXgydyIsInBob25lIjoiIiwib3BlbklkIjpudWxsLCJ1dWlkIjoiNDA3YmY4NWYtZjMxMC00MjI1LWE0MTQtZGJlODkyOGViYWJmIiwiZW1haWwiOiJsaXVsaW5fMDAzQDE2My5jb20iLCJleHAiOjE3NzA5NzE1OTl9.v6oIKWFYtPRVo8CZ5RxBOljjZtqAwGFFJjmmn24bL7N8ORyjBC71uL_wsRW_m9EGnqGo2L4ccWe3LPLPe5ELDA"
+minerU_Token = ""
 
 # [全局] Qwen API Key（摘要/精简/批量）（请从环境变量 QWEN_API_KEY 读取，或在本地未提交文件中配置）
-qwen_api_key = "sk-f6fa897f7f564c5d87237a6707536ac9"
+qwen_api_key = ""
 
 # [全局] NVIDIA API Key（请从环境变量 NVIDIA_API_KEY 读取，或在本地未提交文件中配置）
-nvidia_api_key = "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"
+nvidia_api_key = ""
 
 
 # [Controller/llm_select_theme.py] 主题相关性评分模型
@@ -120,12 +121,12 @@ summary_concurrency = 16
 
 # [Controller/paper_summary_claude.py] 摘要生成模型2
 summary_base_url_2 = "https://gptgod.cloud/v1"
-summary_gptgod_apikey = "sk-YU9CKg91ZqVBSXPQD320124a8b67463eB95bC4409869749d"  # 请从环境变量 SUMMARY_GPTGOD_APIKEY 读取
+summary_gptgod_apikey = ""  # 请从环境变量 SUMMARY_GPTGOD_APIKEY 读取
 summary_model_2 = "claude-sonnet-4-5-all"
 
 # [Controller/paper_summary.py] 摘要生成模型3（VectorEngine）
 summary_base_url_3 = "https://api.vectorengine.ai/v1"
-summary_apikey_3 = "sk-uDyVxgvpHwTmeX3D87Vq8p41eYBrapW7gQdR1FNSqG1D6I02"  # 请从环境变量 SUMMARY_APIKEY_3 读取
+summary_apikey_3 = ""  # 请从环境变量 SUMMARY_APIKEY_3 读取
 summary_model_3 = "claude-opus-4-5-20251101"
 
 # [Controller/paper_summary.py] & [Controller/summary_limit.py]
@@ -154,12 +155,12 @@ summary_limit_input_safety_margin = 4096
 
 # [Controller/summary_limit.py] 摘要精简模型2
 summary_limit_url_2 = "https://gptgod.cloud/v1"
-summary_limit_gptgod_apikey = "sk-YU9CKg91ZqVBSXPQD320124a8b67463eB95bC4409869749d"  # 请从环境变量 SUMMARY_LIMIT_GPTGOD_APIKEY 读取
+summary_limit_gptgod_apikey = ""  # 请从环境变量 SUMMARY_LIMIT_GPTGOD_APIKEY 读取
 summary_limit_model_2 = "claude-sonnet-4-5-all"
 
 # [Controller/summary_limit.py] 摘要精简模型3（VectorEngine）
 summary_limit_url_3 = "https://api.vectorengine.ai/v1"
-summary_limit_apikey_3 = "sk-uDyVxgvpHwTmeX3D87Vq8p41eYBrapW7gQdR1FNSqG1D6I02"  # 请从环境变量 SUMMARY_LIMIT_APIKEY_3 读取
+summary_limit_apikey_3 = ""  # 请从环境变量 SUMMARY_LIMIT_APIKEY_3 读取
 summary_limit_model_3 = "claude-opus-4-5-20251101"
 
 # [Controller/selectpaper_to_jsonl.py] [Controller/paper_summary_batch.py] 批量摘要配置

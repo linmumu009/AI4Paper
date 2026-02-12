@@ -15,6 +15,8 @@ defineProps<{
   batchMode: boolean
   expandedPapers: Set<string>
   paperNotes: Map<string, KbNote[]>
+  renamingPaperId?: string | null
+  renamingPaperTitle?: string
 }>()
 
 const emit = defineEmits<{
@@ -34,8 +36,12 @@ const emit = defineEmits<{
   'create-note': [paperId: string]
   'upload-file': [paperId: string]
   'add-link': [paperId: string]
-  'open-note': [noteId: number]
+  'open-note': [payload: { id: number; paperId: string }]
+  'open-pdf': [payload: { paperId: string; filePath: string; title: string }]
   'delete-note': [noteId: number]
+  'update:renaming-paper-title': [title: string]
+  'confirm-rename-paper': []
+  'cancel-rename-paper': []
 }>()
 
 // Per-paper add dropdown
@@ -74,9 +80,21 @@ function onNoteClick(note: KbNote) {
   if (note.type === 'link' && note.file_url) {
     window.open(note.file_url, '_blank')
   } else if (note.type === 'file' && note.file_path) {
+    const isPdf =
+      (note.mime_type || '').toLowerCase() === 'application/pdf' ||
+      note.file_path.toLowerCase().endsWith('.pdf') ||
+      (note.title || '').toLowerCase().endsWith('.pdf')
+    if (isPdf) {
+      emit('open-pdf', {
+        paperId: note.paper_id,
+        filePath: note.file_path,
+        title: note.title,
+      })
+      return
+    }
     window.open(`/static/kb_files/${note.file_path}`, '_blank')
   } else {
-    emit('open-note', note.id)
+    emit('open-note', { id: note.id, paperId: note.paper_id })
   }
 }
 
@@ -181,6 +199,8 @@ function avatarColor(paperId: string): string {
         :batch-mode="batchMode"
         :expanded-papers="expandedPapers"
         :paper-notes="paperNotes"
+        :renaming-paper-id="renamingPaperId"
+        :renaming-paper-title="renamingPaperTitle"
         @toggle-folder="(id: number) => emit('toggle-folder', id)"
         @select-folder="(id: number) => emit('select-folder', id)"
         @open-folder-menu="(ev: MouseEvent, f: KbFolder) => emit('open-folder-menu', ev, f)"
@@ -197,8 +217,12 @@ function avatarColor(paperId: string): string {
         @create-note="(id: string) => emit('create-note', id)"
         @upload-file="(id: string) => emit('upload-file', id)"
         @add-link="(id: string) => emit('add-link', id)"
-        @open-note="(id: number) => emit('open-note', id)"
+        @open-note="(payload) => emit('open-note', payload)"
+        @open-pdf="(payload) => emit('open-pdf', payload)"
         @delete-note="(id: number) => emit('delete-note', id)"
+        @update:renaming-paper-title="(t: string) => emit('update:renaming-paper-title', t)"
+        @confirm-rename-paper="emit('confirm-rename-paper')"
+        @cancel-rename-paper="emit('cancel-rename-paper')"
       />
 
       <!-- Papers inside folder -->
@@ -234,7 +258,25 @@ function avatarColor(paperId: string): string {
           >▶</button>
           <div v-else class="w-4 shrink-0"></div>
 
+          <!-- Inline rename for paper -->
+          <template v-if="renamingPaperId === paper.paper_id">
+            <div
+              class="w-7 h-7 rounded-full shrink-0 flex items-center justify-center text-white text-[9px] font-bold"
+              :style="{ background: avatarColor(paper.paper_id) }"
+            >{{ (paper.paper_data?.institution || '?').slice(0, 2) }}</div>
+            <input
+              :value="renamingPaperTitle"
+              @input="emit('update:renaming-paper-title', ($event.target as HTMLInputElement).value)"
+              class="flex-1 bg-bg-elevated border border-border rounded px-2 py-0.5 text-[11px] text-text-primary focus:outline-none focus:border-tinder-pink/50 min-w-0"
+              autofocus
+              @keydown.enter="emit('confirm-rename-paper')"
+              @keydown.escape="emit('cancel-rename-paper')"
+              @blur="emit('confirm-rename-paper')"
+              @click.stop
+            />
+          </template>
           <button
+            v-else
             class="flex-1 flex items-center gap-2 min-w-0 bg-transparent border-none cursor-pointer text-left p-0"
             @click="emit('open-paper', paper.paper_id)"
           >

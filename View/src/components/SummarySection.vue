@@ -7,7 +7,7 @@ defineProps<{
 </script>
 
 <template>
-  <div class="space-y-6">
+  <div class="space-y-6 pb-8">
     <!-- 文章简介 -->
     <section>
       <h2 class="flex items-center gap-2 text-base font-semibold text-text-primary mb-3">

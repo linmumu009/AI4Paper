@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { ref, watch, onBeforeUnmount, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, onBeforeRouteLeave } from 'vue-router'
 import { useEditor, EditorContent } from '@tiptap/vue-3'
 import StarterKit from '@tiptap/starter-kit'
 import Image from '@tiptap/extension-image'
 import Link from '@tiptap/extension-link'
 import Placeholder from '@tiptap/extension-placeholder'
-import { fetchNoteDetail, updateNote } from '../api'
+import { fetchNoteDetail, updateNote, deleteNote as deleteNoteApi } from '../api'
 import type { KbNote } from '../types/paper'
 
 const props = defineProps<{
@@ -16,6 +16,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   close: []
+  saved: [{ id: number; title: string }]
 }>()
 
 const router = useRouter()
@@ -26,6 +27,9 @@ const saving = ref(false)
 const title = ref('')
 const lastSavedAt = ref('')
 const titleManuallyEdited = ref(false)
+
+// 离开路由的方式标记（仅路由模式下使用）
+const leaveMode = ref<'normal' | 'explicit-save' | null>(null)
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -41,16 +45,19 @@ function extractDefaultTitle(): string {
   const json = editor.value.getJSON()
   if (!json.content || json.content.length === 0) return ''
 
-  // Try first heading
+  // 优先取第一个 heading 作为默认标题
   const heading = json.content.find((n: any) => n.type === 'heading')
   if (heading) {
     const text = getTextFromNode(heading).trim()
     if (text) return text
   }
 
-  // Fallback: first 10 chars of plain text
-  const plain = editor.value.getText().trim()
-  if (plain) return plain.slice(0, 10)
+  // 若没有标题块，则退化为“第一段文本”的前若干字符
+  const firstBlock = json.content.find((n: any) => n.type === 'paragraph' || n.type === 'heading') || json.content[0]
+  if (firstBlock) {
+    const text = getTextFromNode(firstBlock).trim()
+    if (text) return text.slice(0, 60)
+  }
 
   return ''
 }
@@ -80,6 +87,35 @@ const editor = useEditor({
     scheduleSave()
   },
 })
+
+// 判断当前笔记是否“空”（无标题且正文无内容）
+function isEffectivelyEmpty(): boolean {
+  if (!editor.value) return true
+  const json = editor.value.getJSON()
+  const t = title.value.trim()
+  const isDefaultTitle = (v: string) => v === '' || v === '未命名笔记' || v === '无标题笔记' || v === '新建笔记'
+
+  if (!json.content || json.content.length === 0) {
+    // 没有任何正文内容时，仅将“默认标题”视为空
+    return isDefaultTitle(t)
+  }
+
+  const text = json.content.map((n: any) => getTextFromNode(n)).join('').trim()
+
+  // 无正文 + 默认标题 -> 空笔记；否则视为非空
+  if (!text) return isDefaultTitle(t)
+
+  return false
+}
+
+// 供父组件调用：立即执行一次保存（如果有笔记可保存）
+async function flushSave() {
+  if (saveTimer) {
+    clearTimeout(saveTimer)
+    saveTimer = null
+  }
+  await doSave()
+}
 
 async function loadNote() {
   loading.value = true
@@ -115,6 +151,8 @@ async function doSave() {
     const html = editor.value.getHTML()
     await updateNote(note.value.id, { title: title.value, content: html })
     lastSavedAt.value = new Date().toLocaleTimeString()
+    // 通知父组件：已保存，携带最新标题
+    emit('saved', { id: note.value.id, title: title.value })
   } catch {
     // silent
   } finally {
@@ -127,23 +165,40 @@ function onTitleInput() {
   scheduleSave()
 }
 
-function goBack() {
-  // flush pending save
+async function goBack() {
+  if (props.embedded) {
+    // 内嵌模式：仍然保持“始终保存再关闭”的旧行为，由父组件决定是否删除
+    if (saveTimer) {
+      clearTimeout(saveTimer)
+      saveTimer = null
+    }
+    await doSave()
+    emit('close')
+    return
+  }
+
+  // 路由模式：交由 onBeforeRouteLeave 按“空则删，有则保存”规则处理
   if (saveTimer) {
     clearTimeout(saveTimer)
-    doSave()
+    saveTimer = null
   }
-  if (props.embedded) {
-    emit('close')
-  } else {
-    router.back()
-  }
+  leaveMode.value = 'normal'
+  router.back()
 }
 
 async function saveAndClose() {
+  if (props.embedded) {
+    if (saveTimer) clearTimeout(saveTimer)
+    await doSave()
+    emit('close')
+    return
+  }
+
+  // 路由模式下显式保存：无论是否为空都保留该笔记
   if (saveTimer) clearTimeout(saveTimer)
+  leaveMode.value = 'explicit-save'
   await doSave()
-  goBack()
+  router.back()
 }
 
 // Toolbar helpers
@@ -179,6 +234,41 @@ onBeforeUnmount(() => {
 })
 
 watch(() => props.id, loadNote)
+
+// 路由离开守卫：仅在非 embedded 模式下应用“空则删，有则自动保存”规则
+onBeforeRouteLeave(async (_to, _from, next) => {
+  if (props.embedded || !note.value) {
+    next()
+    return
+  }
+
+  // 显式点击“保存”离开时，已保存过，直接放行
+  if (leaveMode.value === 'explicit-save') {
+    leaveMode.value = null
+    next()
+    return
+  }
+
+  const empty = isEffectivelyEmpty()
+  try {
+    if (empty) {
+      await deleteNoteApi(note.value.id)
+    } else {
+      await flushSave()
+    }
+  } catch {
+    // 失败不阻塞导航
+  } finally {
+    leaveMode.value = null
+  }
+  next()
+})
+
+// 向父组件暴露方法，用于判断是否为空 & 强制保存
+defineExpose({
+  isEffectivelyEmpty,
+  flushSave,
+})
 </script>
 
 <template>

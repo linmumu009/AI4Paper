@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PDF Viewer</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { height: 100%; overflow: hidden; background: #2b2b2b; color: #e0e0e0; font-family: system-ui, sans-serif; }
+
+/* Toolbar */
+.toolbar {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 12px; background: #1a1a2e; border-bottom: 1px solid #333;
+  height: 44px; flex-shrink: 0;
+}
+.toolbar button {
+  background: #333; border: 1px solid #555; color: #e0e0e0; border-radius: 4px;
+  padding: 4px 10px; cursor: pointer; font-size: 13px; transition: background 0.15s;
+}
+.toolbar button:hover { background: #444; }
+.toolbar button:disabled { opacity: 0.4; cursor: default; }
+.toolbar .separator { width: 1px; height: 24px; background: #444; margin: 0 4px; }
+.toolbar input[type="number"] {
+  width: 50px; background: #333; border: 1px solid #555; color: #e0e0e0;
+  border-radius: 4px; padding: 4px 6px; text-align: center; font-size: 13px;
+}
+.toolbar .page-info { font-size: 13px; color: #aaa; white-space: nowrap; }
+.toolbar .zoom-info { font-size: 12px; color: #888; min-width: 48px; text-align: center; }
+.toolbar .spacer { flex: 1; }
+
+/* Highlight color picker */
+.color-picker-group { display: flex; gap: 3px; align-items: center; }
+.color-dot {
+  width: 18px; height: 18px; border-radius: 50%; cursor: pointer;
+  border: 2px solid transparent; transition: border-color 0.15s;
+}
+.color-dot:hover, .color-dot.active { border-color: #fff; }
+
+/* Container */
+.viewer-container {
+  flex: 1; overflow: auto; display: flex; flex-direction: column; align-items: center;
+  padding: 16px; gap: 12px;
+}
+.page-wrapper {
+  position: relative; box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+  background: white;
+}
+.page-wrapper canvas { display: block; }
+
+/* Text layer for selection */
+.text-layer {
+  position: absolute; left: 0; top: 0; right: 0; bottom: 0;
+  overflow: hidden; opacity: 0.25; line-height: 1.0;
+}
+.text-layer > span {
+  color: transparent; position: absolute; white-space: pre;
+  transform-origin: 0 0;
+}
+.text-layer ::selection { background: rgba(0, 0, 255, 0.3); }
+
+/* Highlight overlay */
+.highlight-layer {
+  position: absolute; left: 0; top: 0; right: 0; bottom: 0;
+  pointer-events: none;
+}
+.highlight-rect {
+  position: absolute; pointer-events: auto; cursor: pointer;
+  opacity: 0.35; border-radius: 2px;
+}
+.highlight-rect:hover { opacity: 0.55; }
+
+/* Highlight button (floating) */
+.highlight-btn {
+  position: fixed; display: none; z-index: 1000;
+  background: #fd267a; color: white; border: none; border-radius: 6px;
+  padding: 6px 14px; font-size: 13px; cursor: pointer;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.4);
+}
+.highlight-btn:hover { background: #e01f6e; }
+
+/* Loading */
+.loading-overlay {
+  position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+  background: #2b2b2b; z-index: 9999; font-size: 16px; color: #aaa;
+}
+.loading-overlay.hidden { display: none; }
+</style>
+</head>
+<body>
+<div class="loading-overlay" id="loadingOverlay">加载 PDF 中...</div>
+
+<div style="display:flex;flex-direction:column;height:100%;">
+  <!-- Toolbar -->
+  <div class="toolbar">
+    <button id="prevPage" title="上一页">&#9664;</button>
+    <input type="number" id="pageInput" min="1" value="1">
+    <span class="page-info">/ <span id="pageCount">0</span></span>
+    <button id="nextPage" title="下一页">&#9654;</button>
+    <div class="separator"></div>
+    <button id="zoomOut" title="缩小">-</button>
+    <span class="zoom-info" id="zoomLevel">100%</span>
+    <button id="zoomIn" title="放大">+</button>
+    <button id="fitWidth" title="适应宽度">↔</button>
+    <div class="separator"></div>
+    <div class="color-picker-group">
+      <span style="font-size:12px;color:#888;">高亮:</span>
+      <div class="color-dot active" data-color="#FFFF00" style="background:#FFFF00;" title="黄色"></div>
+      <div class="color-dot" data-color="#90EE90" style="background:#90EE90;" title="绿色"></div>
+      <div class="color-dot" data-color="#FFB6C1" style="background:#FFB6C1;" title="粉色"></div>
+      <div class="color-dot" data-color="#87CEFA" style="background:#87CEFA;" title="蓝色"></div>
+      <div class="color-dot" data-color="#FFA500" style="background:#FFA500;" title="橙色"></div>
+    </div>
+    <div class="spacer"></div>
+    <button id="downloadBtn" title="下载 PDF">📥 下载</button>
+  </div>
+
+  <!-- Pages container -->
+  <div class="viewer-container" id="viewerContainer"></div>
+</div>
+
+<!-- Floating highlight button -->
+<button class="highlight-btn" id="highlightBtn">🖍 高亮</button>
+
+<script type="module">
+// Load PDF.js from CDN
+const PDFJS_CDN = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38';
+
+// Dynamically import pdf.js
+const pdfjsLib = await import(`${PDFJS_CDN}/pdf.min.mjs`);
+pdfjsLib.GlobalWorkerOptions.workerSrc = `${PDFJS_CDN}/pdf.worker.min.mjs`;
+
+// Parse URL params
+const params = new URLSearchParams(window.location.search);
+const fileUrl = params.get('file') || '';
+const paperId = params.get('paperId') || '';
+
+if (!fileUrl) {
+  document.getElementById('loadingOverlay').textContent = '未指定 PDF 文件';
+  throw new Error('No file URL');
+}
+
+// State
+let pdfDoc = null;
+let currentScale = 1.5;
+let highlightColor = '#FFFF00';
+let highlights = []; // {id, page, rects: [{x,y,w,h}], color, text}
+
+// Elements
+const container = document.getElementById('viewerContainer');
+const pageInput = document.getElementById('pageInput');
+const pageCountEl = document.getElementById('pageCount');
+const zoomLevelEl = document.getElementById('zoomLevel');
+const loadingOverlay = document.getElementById('loadingOverlay');
+const highlightBtn = document.getElementById('highlightBtn');
+
+// Load saved highlights from parent
+function loadHighlights() {
+  try {
+    window.parent.postMessage({ type: 'pdfviewer:getHighlights', paperId }, '*');
+  } catch(e) {}
+}
+
+// Listen for messages from parent
+window.addEventListener('message', (e) => {
+  if (e.data?.type === 'pdfviewer:highlights') {
+    highlights = e.data.highlights || [];
+    renderAllHighlights();
+  }
+});
+
+// Load PDF
+async function loadPDF() {
+  try {
+    pdfDoc = await pdfjsLib.getDocument(fileUrl).promise;
+    pageCountEl.textContent = pdfDoc.numPages;
+    pageInput.max = pdfDoc.numPages;
+    loadingOverlay.classList.add('hidden');
+    await renderAllPages();
+    loadHighlights();
+  } catch (err) {
+    loadingOverlay.textContent = `加载失败: ${err.message}`;
+  }
+}
+
+// Render all pages
+async function renderAllPages() {
+  container.innerHTML = '';
+  for (let i = 1; i <= pdfDoc.numPages; i++) {
+    await renderPage(i);
+  }
+  updateZoomDisplay();
+}
+
+// Render a single page
+async function renderPage(pageNum) {
+  const page = await pdfDoc.getPage(pageNum);
+  const viewport = page.getViewport({ scale: currentScale });
+
+  const wrapper = document.createElement('div');
+  wrapper.className = 'page-wrapper';
+  wrapper.dataset.page = pageNum;
+  wrapper.style.width = viewport.width + 'px';
+  wrapper.style.height = viewport.height + 'px';
+
+  // Canvas
+  const canvas = document.createElement('canvas');
+  canvas.width = viewport.width;
+  canvas.height = viewport.height;
+  const ctx = canvas.getContext('2d');
+  await page.render({ canvasContext: ctx, viewport }).promise;
+  wrapper.appendChild(canvas);
+
+  // Text layer
+  const textLayerDiv = document.createElement('div');
+  textLayerDiv.className = 'text-layer';
+  textLayerDiv.style.width = viewport.width + 'px';
+  textLayerDiv.style.height = viewport.height + 'px';
+  const textContent = await page.getTextContent();
+  for (const item of textContent.items) {
+    if (!item.str) continue;
+    const tx = pdfjsLib.Util.transform(viewport.transform, item.transform);
+    const span = document.createElement('span');
+    span.textContent = item.str;
+    const fontHeight = Math.sqrt(tx[2]*tx[2] + tx[3]*tx[3]);
+    span.style.left = tx[4] + 'px';
+    span.style.top = (tx[5] - fontHeight) + 'px';
+    span.style.fontSize = fontHeight + 'px';
+    span.style.fontFamily = item.fontName || 'sans-serif';
+    if (tx[0] !== fontHeight) {
+      span.style.transform = `scaleX(${tx[0]/fontHeight})`;
+    }
+    textLayerDiv.appendChild(span);
+  }
+  wrapper.appendChild(textLayerDiv);
+
+  // Highlight layer
+  const hlLayer = document.createElement('div');
+  hlLayer.className = 'highlight-layer';
+  hlLayer.dataset.page = pageNum;
+  wrapper.appendChild(hlLayer);
+
+  container.appendChild(wrapper);
+
+  // Render existing highlights for this page
+  renderPageHighlights(pageNum, hlLayer, viewport);
+}
+
+// Render highlights for a specific page
+function renderPageHighlights(pageNum, hlLayer, viewport) {
+  if (!hlLayer) {
+    hlLayer = container.querySelector(`.highlight-layer[data-page="${pageNum}"]`);
+  }
+  if (!hlLayer) return;
+
+  // Clear existing
+  hlLayer.innerHTML = '';
+
+  const pageHighlights = highlights.filter(h => h.page === pageNum);
+  for (const hl of pageHighlights) {
+    for (const rect of (hl.rects || [])) {
+      const div = document.createElement('div');
+      div.className = 'highlight-rect';
+      div.style.left = (rect.x * currentScale) + 'px';
+      div.style.top = (rect.y * currentScale) + 'px';
+      div.style.width = (rect.w * currentScale) + 'px';
+      div.style.height = (rect.h * currentScale) + 'px';
+      div.style.background = hl.color || highlightColor;
+      div.title = hl.text || '';
+      div.dataset.highlightId = hl.id || '';
+      div.addEventListener('click', () => onHighlightClick(hl));
+      hlLayer.appendChild(div);
+    }
+  }
+}
+
+function renderAllHighlights() {
+  for (let i = 1; i <= (pdfDoc?.numPages || 0); i++) {
+    renderPageHighlights(i);
+  }
+}
+
+// Highlight click -> send to parent for annotation panel
+function onHighlightClick(hl) {
+  window.parent.postMessage({ type: 'pdfviewer:highlightClick', highlight: hl, paperId }, '*');
+}
+
+// Text selection -> show highlight button
+let pendingSelection = null;
+document.addEventListener('mouseup', (e) => {
+  const sel = window.getSelection();
+  if (!sel || sel.isCollapsed || !sel.toString().trim()) {
+    highlightBtn.style.display = 'none';
+    pendingSelection = null;
+    return;
+  }
+
+  const text = sel.toString().trim();
+  const range = sel.getRangeAt(0);
+
+  // Find which page the selection is in
+  const textLayer = range.startContainer.parentElement?.closest('.text-layer');
+  if (!textLayer) { highlightBtn.style.display = 'none'; return; }
+
+  const pageWrapper = textLayer.closest('.page-wrapper');
+  if (!pageWrapper) { highlightBtn.style.display = 'none'; return; }
+  const pageNum = parseInt(pageWrapper.dataset.page);
+
+  // Get selection rects relative to page
+  const pageRect = pageWrapper.getBoundingClientRect();
+  const clientRects = range.getClientRects();
+  const rects = [];
+  for (const cr of clientRects) {
+    rects.push({
+      x: (cr.left - pageRect.left) / currentScale,
+      y: (cr.top - pageRect.top) / currentScale,
+      w: cr.width / currentScale,
+      h: cr.height / currentScale,
+    });
+  }
+
+  pendingSelection = { page: pageNum, rects, text, color: highlightColor };
+
+  // Position the highlight button near the selection
+  const lastRect = clientRects[clientRects.length - 1];
+  highlightBtn.style.left = (lastRect.right + 8) + 'px';
+  highlightBtn.style.top = (lastRect.top - 4) + 'px';
+  highlightBtn.style.display = 'block';
+});
+
+highlightBtn.addEventListener('click', () => {
+  if (!pendingSelection) return;
+  const hl = { ...pendingSelection, id: Date.now().toString() };
+  highlights.push(hl);
+  renderPageHighlights(hl.page);
+  // Notify parent
+  window.parent.postMessage({
+    type: 'pdfviewer:addHighlight',
+    highlight: hl,
+    paperId,
+  }, '*');
+  highlightBtn.style.display = 'none';
+  window.getSelection()?.removeAllRanges();
+  pendingSelection = null;
+});
+
+// Navigation
+document.getElementById('prevPage').addEventListener('click', () => {
+  const cur = parseInt(pageInput.value);
+  if (cur > 1) { pageInput.value = cur - 1; scrollToPage(cur - 1); }
+});
+document.getElementById('nextPage').addEventListener('click', () => {
+  const cur = parseInt(pageInput.value);
+  if (cur < pdfDoc.numPages) { pageInput.value = cur + 1; scrollToPage(cur + 1); }
+});
+pageInput.addEventListener('change', () => {
+  let val = parseInt(pageInput.value);
+  if (isNaN(val) || val < 1) val = 1;
+  if (val > pdfDoc.numPages) val = pdfDoc.numPages;
+  pageInput.value = val;
+  scrollToPage(val);
+});
+
+function scrollToPage(pageNum) {
+  const el = container.querySelector(`.page-wrapper[data-page="${pageNum}"]`);
+  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// Update page number on scroll
+container.addEventListener('scroll', () => {
+  const wrappers = container.querySelectorAll('.page-wrapper');
+  const scrollTop = container.scrollTop + 100;
+  for (const w of wrappers) {
+    if (w.offsetTop + w.offsetHeight > scrollTop) {
+      pageInput.value = w.dataset.page;
+      break;
+    }
+  }
+});
+
+// Zoom
+function updateZoomDisplay() {
+  zoomLevelEl.textContent = Math.round(currentScale * 100 / 1.5) + '%';
+}
+async function setZoom(newScale) {
+  currentScale = Math.max(0.5, Math.min(5, newScale));
+  await renderAllPages();
+}
+document.getElementById('zoomIn').addEventListener('click', () => setZoom(currentScale + 0.25));
+document.getElementById('zoomOut').addEventListener('click', () => setZoom(currentScale - 0.25));
+document.getElementById('fitWidth').addEventListener('click', async () => {
+  if (!pdfDoc) return;
+  const page = await pdfDoc.getPage(1);
+  const viewport = page.getViewport({ scale: 1 });
+  const containerWidth = container.clientWidth - 40;
+  setZoom(containerWidth / viewport.width);
+});
+
+// Color picker
+document.querySelectorAll('.color-dot').forEach(dot => {
+  dot.addEventListener('click', () => {
+    document.querySelectorAll('.color-dot').forEach(d => d.classList.remove('active'));
+    dot.classList.add('active');
+    highlightColor = dot.dataset.color;
+  });
+});
+
+// Download
+document.getElementById('downloadBtn').addEventListener('click', () => {
+  const a = document.createElement('a');
+  a.href = fileUrl;
+  a.download = fileUrl.split('/').pop() || 'paper.pdf';
+  a.click();
+});
+
+// Keyboard shortcuts
+document.addEventListener('keydown', (e) => {
+  if (e.ctrlKey && e.key === '=') { e.preventDefault(); setZoom(currentScale + 0.25); }
+  if (e.ctrlKey && e.key === '-') { e.preventDefault(); setZoom(currentScale - 0.25); }
+  if (e.ctrlKey && e.key === '0') { e.preventDefault(); setZoom(1.5); }
+});
+
+// Start
+loadPDF();
+</script>
+</body>
+</html>

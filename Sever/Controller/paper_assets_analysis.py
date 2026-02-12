@@ -12,13 +12,8 @@ from typing import Any, Dict, List, Optional
 
 import pandas as pd
 
-# 假设你的配置文件路径是正确的，如果报错请调整
-# sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-# from config.config import DATA_ROOT  # noqa: E402
-
-# 为了方便你在本地直接运行测试，我先模拟一个 DATA_ROOT，
-# 实际使用时请取消上面的注释，删掉下面这一行
-DATA_ROOT = "./data" 
+sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+from config.config import DATA_ROOT  # noqa: E402
 
 
 # ---------------------------------------------------------------------------

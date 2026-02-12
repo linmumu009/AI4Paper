@@ -188,7 +188,7 @@ def find_latest_selected_dir(root: Path) -> tuple[Path, str]:
 def run():
     logger = setup_logging()
     ap = argparse.ArgumentParser("selectedpaper_to_mineru")
-    ap.add_argument("--in-root", default=os.path.join("data", "selectedpaper"))
+    ap.add_argument("--in-root", default=os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "selectedpaper"))
     ap.add_argument("--date", default="")
     ap.add_argument("--limit", type=int, default=None)
     ap.add_argument("--manifest", default="")

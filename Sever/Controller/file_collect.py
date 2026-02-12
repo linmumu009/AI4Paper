@@ -107,6 +107,9 @@ def run() -> None:
     paper_summary_dir = Path(DATA_ROOT) / "paper_summary" / "single" / date_str
     summary_limit_dir = Path(DATA_ROOT) / "summary_limit" / "single" / date_str
     
+    # 2.5 MinerU 完整 markdown：从 selectedpaper_to_mineru 读取
+    mineru_dir = Path(DATA_ROOT) / "selectedpaper_to_mineru" / date_str
+    
     # 3. pdf_info.json：从 pdf_info 目录读取
     pdf_info_path = Path(DATA_ROOT) / "pdf_info" / f"{date_str}.json"
     pdf_info_map = load_pdf_info_map(pdf_info_path) if pdf_info_path.exists() else {}
@@ -159,6 +162,14 @@ def run() -> None:
             copy_if_exists(limit_src, limit_dst, missing)
             if limit_dst.exists():
                 print(f"[FILE_COLLECT] copied MD: {paper_id}_limit.md", flush=True)
+
+        # 2.3 从 selectedpaper_to_mineru 复制 MinerU 完整 markdown，命名为 {paper_id}_mineru.md
+        mineru_src = mineru_dir / paper_id / f"{paper_id}.md"
+        if mineru_src.exists():
+            mineru_dst = paper_out_dir / f"{paper_id}_mineru.md"
+            copy_if_exists(mineru_src, mineru_dst, missing)
+            if mineru_dst.exists():
+                print(f"[FILE_COLLECT] copied MD: {paper_id}_mineru.md", flush=True)
 
         # 3. 复制 pdf_info.json
         info = match_pdf_info(pdf_info_map, paper_id)
