@@ -31,6 +31,98 @@ from config.config import (  # noqa: E402
 )
 
 
+# ---------------------------------------------------------------------------
+# User-config helpers (same pattern as paper_summary / summary_limit)
+# ---------------------------------------------------------------------------
+
+def _load_user_config(user_id: int) -> Dict[str, Any]:
+    try:
+        from services.user_settings_service import get_settings
+        return get_settings(user_id, "paper_recommend")
+    except Exception:
+        return {}
+
+
+def _resolve_llm_preset(user_id: int, preset_id: Any) -> Dict[str, Any]:
+    try:
+        pid = int(preset_id)
+    except (TypeError, ValueError):
+        return {}
+    try:
+        from services.user_presets_service import get_llm_preset
+        return get_llm_preset(user_id, pid) or {}
+    except Exception:
+        return {}
+
+
+def _resolve_prompt_preset(user_id: int, preset_id: Any) -> str:
+    try:
+        pid = int(preset_id)
+    except (TypeError, ValueError):
+        return ""
+    try:
+        from services.user_presets_service import get_prompt_preset
+        p = get_prompt_preset(user_id, pid)
+        return (p or {}).get("prompt_content", "")
+    except Exception:
+        return ""
+
+
+def make_client_for_user(user_id: Optional[int] = None) -> Tuple[OpenAI, Dict[str, Any]]:
+    """Return (client, effective_cfg) honouring user overrides when *user_id* is given.
+
+    effective_cfg keys: model, temperature, max_tokens, system_prompt.
+    Falls back to config.py values when no user preset is found.
+    """
+    # Global defaults
+    key: str = (qwen_api_key or "").strip()
+    base: str = (theme_select_base_url or "").strip() or "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    model_name: str = theme_select_model or ""
+    temperature = theme_select_temperature
+    max_tokens = theme_select_max_tokens
+    sys_prompt: str = theme_select_system_prompt or ""
+
+    if user_id is not None:
+        ucfg = _load_user_config(user_id)
+        if ucfg:
+            # Module-specific preset first, then generic fallback
+            preset_id = ucfg.get("theme_select_llm_preset_id") or ucfg.get("llm_preset_id")
+            preset = _resolve_llm_preset(user_id, preset_id) if preset_id else {}
+            if preset:
+                key = (preset.get("api_key") or key).strip()
+                base = (preset.get("base_url") or base).strip()
+                model_name = (preset.get("model") or model_name).strip()
+                if preset.get("temperature") is not None:
+                    temperature = preset["temperature"]
+                if preset.get("max_tokens") is not None:
+                    max_tokens = preset["max_tokens"]
+            else:
+                key = (ucfg.get("llm_api_key") or key).strip()
+                base = (ucfg.get("llm_base_url") or base).strip()
+                model_name = (ucfg.get("llm_model") or model_name).strip()
+                if ucfg.get("temperature") is not None:
+                    temperature = ucfg["temperature"]
+                if ucfg.get("max_tokens") is not None:
+                    max_tokens = ucfg["max_tokens"]
+
+            # Prompt override
+            prompt_preset_id = ucfg.get("theme_select_prompt_preset_id")
+            if prompt_preset_id:
+                content = _resolve_prompt_preset(user_id, prompt_preset_id)
+                if content:
+                    sys_prompt = content
+
+    if not key:
+        raise SystemExit("theme_select: no api_key available (global config or user preset)")
+    client = OpenAI(api_key=key, base_url=base)
+    return client, {
+        "model": model_name,
+        "temperature": temperature,
+        "max_tokens": max_tokens,
+        "system_prompt": sys_prompt,
+    }
+
+
 def setup_logging() -> logging.Logger:
     logger = logging.getLogger("llm_select_theme")
     logger.setLevel(logging.INFO)
@@ -92,11 +184,9 @@ class PaperRecord:
 
 
 def make_client() -> OpenAI:
-    key = (qwen_api_key or "").strip()
-    if not key:
-        raise SystemExit("qwen_api_key missing in config.config")
-    base = (theme_select_base_url or "").strip() or "https://dashscope.aliyuncs.com/compatible-mode/v1"
-    return OpenAI(api_key=key, base_url=base)
+    """Legacy wrapper kept for compatibility; prefer make_client_for_user()."""
+    client, _ = make_client_for_user(user_id=None)
+    return client
 
 
 def build_user_prompt(title: str, abstract: str) -> str:
@@ -122,17 +212,19 @@ def parse_score(text: str) -> float:
     return val
 
 
-def score_one(client: OpenAI, block: PaperRecord) -> float:
+def score_one(client: OpenAI, block: PaperRecord, effective_cfg: Dict[str, Any]) -> float:
     user_content = build_user_prompt(block.title, block.abstract)
-    kwargs = {}
-    if theme_select_temperature is not None:
-        kwargs["temperature"] = float(theme_select_temperature)
-    if theme_select_max_tokens is not None:
-        kwargs["max_tokens"] = int(theme_select_max_tokens)
+    kwargs: Dict[str, Any] = {}
+    temp = effective_cfg.get("temperature")
+    max_tok = effective_cfg.get("max_tokens")
+    if temp is not None:
+        kwargs["temperature"] = float(temp)
+    if max_tok is not None:
+        kwargs["max_tokens"] = int(max_tok)
     resp = client.chat.completions.create(
-        model=theme_select_model,
+        model=effective_cfg.get("model") or theme_select_model,
         messages=[
-            {"role": "system", "content": theme_select_system_prompt},
+            {"role": "system", "content": effective_cfg.get("system_prompt") or theme_select_system_prompt},
             {"role": "user", "content": user_content},
         ],
         stream=False,
@@ -148,6 +240,7 @@ def run() -> None:
     ap = argparse.ArgumentParser("llm_select_theme")
     ap.add_argument("--json", default=None, help="input json from paperList_remove_duplications")
     ap.add_argument("--outdir", default=None, help="output dir (default data/llm_select_theme)")
+    ap.add_argument("--user-id", type=int, default=None, help="user id for per-user LLM/prompt preset override")
     args = ap.parse_args()
 
     input_dir = ROOT / PAPER_DEDUP_DIR
@@ -168,15 +261,15 @@ def run() -> None:
         logger.warning("No paper records found; wrote original json to %s", out_path)
         return
 
-    client = make_client()
+    client, effective_cfg = make_client_for_user(args.user_id)
     scores: Dict[str, float] = {}
     workers = max(1, int(theme_select_concurrency or 1))
-    logger.info("Scoring %d paper(s) with %d worker(s)", len(records), workers)
+    logger.info("Scoring %d paper(s) with %d worker(s) [user_id=%s]", len(records), workers, args.user_id)
 
     total = len(records)
     done = 0
     with ThreadPoolExecutor(max_workers=workers) as pool:
-        future_map = {pool.submit(score_one, client, blk): blk for blk in records}
+        future_map = {pool.submit(score_one, client, blk, effective_cfg): blk for blk in records}
         for future in as_completed(future_map):
             blk = future_map[future]
             try:

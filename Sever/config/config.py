@@ -516,3 +516,32 @@ summary_limit_headline_limit = 18
 """
 以下为可选项：
 """
+
+
+def _auto_load_from_json() -> None:
+    """模块首次导入时自动从 database/config.json 加载覆盖值。
+
+    这样无论是 API 进程还是任何 Pipeline 子进程脚本，
+    都能读到管理员通过系统配置页面保存的全局配置，
+    而无需在每个 Controller 脚本中手动调用 load_config()。
+    """
+    import json as _json
+    import sys as _sys
+
+    _json_path = os.path.join(
+        os.path.dirname(__file__), "..", "database", "config.json"
+    )
+    if not os.path.isfile(_json_path):
+        return
+    try:
+        with open(_json_path, "r", encoding="utf-8") as _f:
+            _overrides = _json.load(_f)
+        _this = _sys.modules[__name__]
+        for _k, _v in _overrides.items():
+            if hasattr(_this, _k):
+                setattr(_this, _k, _v)
+    except Exception:
+        pass
+
+
+_auto_load_from_json()

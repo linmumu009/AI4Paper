@@ -25,6 +25,7 @@ from openai import OpenAI
 _kb_service = None
 _data_service = None
 _user_settings_service = None
+_user_presets_service = None
 
 
 def _get_kb_service():
@@ -49,6 +50,14 @@ def _get_user_settings_service():
         from services import user_settings_service as _us
         _user_settings_service = _us
     return _user_settings_service
+
+
+def _get_user_presets_service():
+    global _user_presets_service
+    if _user_presets_service is None:
+        from services import user_presets_service as _up
+        _user_presets_service = _up
+    return _user_presets_service
 
 
 # ---------------------------------------------------------------------------
@@ -281,16 +290,43 @@ def stream_compare(
     (feature="compare").  If url/key/model are not configured the stream
     emits an error message and terminates.
     """
-    # 0. Load user settings for "compare"
+    # 0. Load user settings for the correct feature based on scope
     us = _get_user_settings_service()
-    cfg = us.get_settings(user_id, "compare")
+    ups = _get_user_presets_service()
+    feature = "inspiration" if scope == "inspiration" else "compare"
+    cfg = us.get_settings(user_id, feature)
+
+    # If a preset is selected, override LLM connection params from preset
+    llm_preset_id = cfg.get("llm_preset_id")
+    if llm_preset_id:
+        preset = ups.get_llm_preset(user_id, int(llm_preset_id))
+        if preset:
+            cfg["llm_base_url"] = preset.get("base_url", "")
+            cfg["llm_api_key"] = preset.get("api_key", "")
+            cfg["llm_model"] = preset.get("model", "")
+            if preset.get("max_tokens") is not None:
+                cfg["max_tokens"] = preset["max_tokens"]
+            if preset.get("temperature") is not None:
+                cfg["temperature"] = preset["temperature"]
+            if preset.get("input_hard_limit") is not None:
+                cfg["input_hard_limit"] = preset["input_hard_limit"]
+            if preset.get("input_safety_margin") is not None:
+                cfg["input_safety_margin"] = preset["input_safety_margin"]
+
+    # If a prompt preset is selected, override system_prompt
+    prompt_preset_id = cfg.get("prompt_preset_id")
+    if prompt_preset_id:
+        p_preset = ups.get_prompt_preset(user_id, int(prompt_preset_id))
+        if p_preset and p_preset.get("prompt_content"):
+            cfg["system_prompt"] = p_preset["prompt_content"]
 
     llm_url = (cfg.get("llm_base_url") or "").strip()
     llm_key = (cfg.get("llm_api_key") or "").strip()
     llm_model = (cfg.get("llm_model") or "").strip()
 
     if not llm_url or not llm_key or not llm_model:
-        yield f"data: {json.dumps('请先在「个人中心 → 对比分析」中配置 LLM 的 URL、API Key 和 Model。', ensure_ascii=False)}\n\n"
+        feature_label = "灵感涌现" if feature == "inspiration" else "对比分析"
+        yield f"data: {json.dumps(f'请先在「个人中心 → {feature_label}」中配置 LLM 的 URL、API Key 和 Model，或选择一个模型预设。', ensure_ascii=False)}\n\n"
         yield "data: [DONE]\n\n"
         return
 
@@ -305,7 +341,7 @@ def stream_compare(
     system_prompt = (cfg.get("system_prompt") or "").strip()
     if not system_prompt:
         # Fallback to default from user_settings_service
-        defaults = us.get_defaults("compare")
+        defaults = us.get_defaults(feature)
         system_prompt = defaults.get("system_prompt", "")
 
     data_source = (cfg.get("data_source") or "summary").strip()

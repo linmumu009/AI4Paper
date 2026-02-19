@@ -36,6 +36,30 @@ from config.config import (  # noqa: E402
 )
 
 
+# ---------------------------------------------------------------------------
+# User-config helpers
+# ---------------------------------------------------------------------------
+
+def _load_user_config(user_id: int) -> Dict[str, Any]:
+    try:
+        from services.user_settings_service import get_settings
+        return get_settings(user_id, "paper_recommend")
+    except Exception:
+        return {}
+
+
+def _resolve_llm_preset(user_id: int, preset_id: Any) -> Dict[str, Any]:
+    try:
+        pid = int(preset_id)
+    except (TypeError, ValueError):
+        return {}
+    try:
+        from services.user_presets_service import get_llm_preset
+        return get_llm_preset(user_id, pid) or {}
+    except Exception:
+        return {}
+
+
 def approx_input_tokens(text: str) -> int:
     if not text:
         return 0
@@ -56,39 +80,73 @@ def today_str() -> str:
     return datetime.now().date().isoformat()
 
 
-def make_client() -> OpenAI:
-    """根据 SLLM 选择不同的大模型服务与密钥（与 paper_summary 保持一致）。"""
+def _global_sllm_connection() -> Tuple[str, str, str]:
+    """Return (key, base_url, model) according to global SLLM switch."""
     if SLLM == 2:
-        key = (summary_gptgod_apikey or "").strip()
-        if not key:
-            raise SystemExit("summary_gptgod_apikey missing in config.config")
-        base = (summary_base_url_2 or "").strip()
-        if not base:
-            raise SystemExit("summary_base_url_2 missing in config.config")
-    elif SLLM == 3:
-        key = (summary_apikey_3 or "").strip()
-        if not key:
-            raise SystemExit("summary_apikey_3 missing in config.config")
-        base = (summary_base_url_3 or "").strip()
-        if not base:
-            raise SystemExit("summary_base_url_3 missing in config.config")
-    else:
-        key = (qwen_api_key or "").strip()
-        if not key:
-            raise SystemExit("qwen_api_key missing in config.config")
-        base = (summary_base_url or "").strip()
-        if not base:
-            raise SystemExit("summary_base_url missing in config.config")
-    return OpenAI(api_key=key, base_url=base)
+        return (summary_gptgod_apikey or "").strip(), (summary_base_url_2 or "").strip(), summary_model_2
+    if SLLM == 3:
+        return (summary_apikey_3 or "").strip(), (summary_base_url_3 or "").strip(), summary_model_3
+    return (qwen_api_key or "").strip(), (summary_base_url or "").strip(), summary_model
+
+
+def make_client_for_user(user_id: Optional[int] = None) -> Tuple[OpenAI, Dict[str, Any]]:
+    """Return (client, effective_cfg) honouring user overrides when *user_id* is given.
+
+    effective_cfg keys: model, temperature, max_tokens, input_hard_limit,
+    input_safety_margin, system_prompt.
+    Falls back to SLLM-based global config when no user preset is found.
+    """
+    g_key, g_base, g_model = _global_sllm_connection()
+    cfg: Dict[str, Any] = {
+        "model": g_model,
+        "temperature": summary_temperature,
+        "max_tokens": summary_max_tokens,
+        "input_hard_limit": summary_input_hard_limit,
+        "input_safety_margin": summary_input_safety_margin,
+        "system_prompt": paper_assets_system_prompt or "",
+    }
+    key: str = g_key
+    base: str = g_base
+
+    if user_id is not None:
+        ucfg = _load_user_config(user_id)
+        if ucfg:
+            # paper_assets processes the output of paper_summary → reuse summary preset
+            preset_id = ucfg.get("summary_llm_preset_id") or ucfg.get("llm_preset_id")
+            preset = _resolve_llm_preset(user_id, preset_id) if preset_id else {}
+            if preset:
+                key = (preset.get("api_key") or key).strip()
+                base = (preset.get("base_url") or base).strip()
+                cfg["model"] = (preset.get("model") or cfg["model"]).strip()
+                for k in ("temperature", "max_tokens", "input_hard_limit", "input_safety_margin"):
+                    if preset.get(k) is not None:
+                        cfg[k] = preset[k]
+            else:
+                key = (ucfg.get("llm_api_key") or key).strip()
+                base = (ucfg.get("llm_base_url") or base).strip()
+                cfg["model"] = (ucfg.get("llm_model") or cfg["model"]).strip()
+                for k in ("temperature", "max_tokens", "input_hard_limit", "input_safety_margin"):
+                    if ucfg.get(k) is not None:
+                        cfg[k] = ucfg[k]
+
+    if not key:
+        raise SystemExit("paper_assets: no api_key available (global config or user preset)")
+    if not base:
+        raise SystemExit("paper_assets: no base_url available (global config or user preset)")
+    client = OpenAI(api_key=key, base_url=base)
+    return client, cfg
+
+
+def make_client() -> OpenAI:
+    """Legacy wrapper kept for compatibility; prefer make_client_for_user()."""
+    client, _ = make_client_for_user(user_id=None)
+    return client
 
 
 def get_assets_model() -> str:
     """根据 SLLM 返回当前使用的模型名称（与 paper_summary 保持一致）。"""
-    if SLLM == 2:
-        return summary_model_2
-    if SLLM == 3:
-        return summary_model_3
-    return summary_model
+    _, _, model = _global_sllm_connection()
+    return model
 
 
 def extract_arxiv_id(source: str) -> Optional[str]:
@@ -208,29 +266,38 @@ def parse_json_from_text(text: str) -> Any:
         return {}
 
 
-def extract_blocks_with_llm(client: OpenAI, md_text: str) -> Dict[str, Dict[str, List[str]]]:
+def extract_blocks_with_llm(
+    client: OpenAI,
+    md_text: str,
+    effective_cfg: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Dict[str, List[str]]]:
     content = (md_text or "").strip()
     if not content:
         return ensure_blocks_structure({})
-    sys_prompt = (paper_assets_system_prompt or "").strip()
+    cfg = effective_cfg or {}
+    sys_prompt = (cfg.get("system_prompt") or paper_assets_system_prompt or "").strip()
     if not sys_prompt:
         raise SystemExit("paper_assets_system_prompt missing in config.config")
 
-    hard_limit = int(summary_input_hard_limit)
-    safety_margin = int(summary_input_safety_margin)
+    hard_limit = int(cfg.get("input_hard_limit") or summary_input_hard_limit)
+    safety_margin = int(cfg.get("input_safety_margin") or summary_input_safety_margin)
     limit_total = hard_limit - safety_margin
     sys_tokens = approx_input_tokens(sys_prompt)
     user_budget = max(1, limit_total - sys_tokens)
     user_content = crop_to_input_tokens(content, user_budget)
 
     kwargs: Dict[str, Any] = {}
-    if summary_temperature is not None:
-        kwargs["temperature"] = float(summary_temperature)
-    if summary_max_tokens is not None:
-        kwargs["max_tokens"] = int(summary_max_tokens)
+    temp = cfg.get("temperature") if cfg else summary_temperature
+    max_tok = cfg.get("max_tokens") if cfg else summary_max_tokens
+    if temp is not None:
+        kwargs["temperature"] = float(temp)
+    if max_tok is not None:
+        kwargs["max_tokens"] = int(max_tok)
+
+    model_name = (cfg.get("model") or get_assets_model()) if cfg else get_assets_model()
 
     resp = client.chat.completions.create(
-        model=get_assets_model(),
+        model=model_name,
         messages=[
             {"role": "system", "content": sys_prompt},
             {
@@ -292,6 +359,7 @@ def process_one(
     client: OpenAI,
     md_path: Path,
     pdf_info_map: Dict[str, Dict[str, Any]],
+    effective_cfg: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     text = md_path.read_text(encoding="utf-8", errors="ignore")
     if not text.strip():
@@ -314,7 +382,7 @@ def process_one(
     published = str(meta.get("published", "") or "").strip() if meta else ""
     year = parse_year(published) if published else None
 
-    blocks = extract_blocks_with_llm(client, text)
+    blocks = extract_blocks_with_llm(client, text, effective_cfg)
 
     return {
         "paper_id": paper_id,
@@ -331,6 +399,7 @@ def run() -> None:
     ap.add_argument("--out-root", default=str(Path(DATA_ROOT) / "paper_assets"))
     ap.add_argument("--date", default="")
     ap.add_argument("--concurrency", type=int, default=summary_concurrency)
+    ap.add_argument("--user-id", type=int, default=None, help="user id for per-user LLM preset override")
     args = ap.parse_args()
 
     in_root = Path(args.input_dir)
@@ -356,10 +425,10 @@ def run() -> None:
 
     pdf_info_map = load_pdf_info_map(date_str)
 
-    client = make_client()
+    client, effective_cfg = make_client_for_user(args.user_id)
     workers = max(1, int(args.concurrency or 0))
     total = len(files)
-    print(f"[PAPER_ASSETS] input_dir={in_dir} total={total} concurrency={workers}", flush=True)
+    print(f"[PAPER_ASSETS] input_dir={in_dir} total={total} concurrency={workers} user_id={args.user_id}", flush=True)
 
     start = time.monotonic()
     done = 0
@@ -367,7 +436,7 @@ def run() -> None:
     results: List[Dict[str, Any]] = []
 
     def task(p: Path) -> Dict[str, Any]:
-        return process_one(client, p, pdf_info_map)
+        return process_one(client, p, pdf_info_map, effective_cfg)
 
     with ThreadPoolExecutor(max_workers=workers) as ex:
         future_map = {ex.submit(task, p): p for p in files}

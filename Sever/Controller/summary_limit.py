@@ -8,7 +8,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
-from typing import List, Tuple, Optional, Dict
+from typing import Any, List, Tuple, Optional, Dict
 
 from openai import OpenAI
 
@@ -54,19 +54,150 @@ SECTION_LABELS = {
     "opinion": ("💡个人观点", "个人观点"),
 }
 
-SECTION_LIMITS = {
+# Default section limits / prompts from config.py  (may be overridden per-user)
+SECTION_LIMITS_DEFAULT: Dict[str, int] = {
     "intro": summary_limit_section_limit_intro,
     "method": summary_limit_section_limit_method,
     "findings": summary_limit_section_limit_findings,
     "opinion": summary_limit_section_limit_opinion,
 }
 
-SECTION_PROMPTS = {
+SECTION_PROMPTS_DEFAULT: Dict[str, str] = {
     "intro": summary_limit_prompt_intro,
     "method": summary_limit_prompt_method,
     "findings": summary_limit_prompt_findings,
     "opinion": summary_limit_prompt_opinion,
 }
+
+# Module-level aliases kept for backward-compat (used by functions that
+# don't receive an explicit effective_cfg).
+SECTION_LIMITS = dict(SECTION_LIMITS_DEFAULT)
+SECTION_PROMPTS = dict(SECTION_PROMPTS_DEFAULT)
+
+
+# ---------------------------------------------------------------------------
+# User‑override helpers  (mirrors paper_summary.py)
+# ---------------------------------------------------------------------------
+
+def _load_user_config(user_id: int) -> Dict[str, Any]:
+    try:
+        from services.user_settings_service import get_settings
+        return get_settings(user_id, "paper_recommend")
+    except Exception:
+        return {}
+
+
+def _resolve_llm_preset(user_id: int, preset_id: Any) -> Dict[str, Any]:
+    try:
+        pid = int(preset_id)
+    except (TypeError, ValueError):
+        return {}
+    try:
+        from services.user_presets_service import get_llm_preset
+        return get_llm_preset(user_id, pid) or {}
+    except Exception:
+        return {}
+
+
+def build_effective_cfg(user_id: Optional[int] = None) -> Dict[str, Any]:
+    """Return a dict with all effective config values for summary_limit.
+
+    When *user_id* is ``None`` every value comes straight from config.py.
+    """
+    cfg: Dict[str, Any] = {
+        "temperature": summary_limit_temperature,
+        "max_tokens": summary_limit_max_tokens,
+        "input_hard_limit": summary_limit_input_hard_limit,
+        "input_safety_margin": summary_limit_input_safety_margin,
+        "headline_limit": summary_limit_headline_limit,
+        "section_limits": dict(SECTION_LIMITS_DEFAULT),
+        "section_prompts": dict(SECTION_PROMPTS_DEFAULT),
+    }
+
+    key: str = ""
+    base: str = ""
+    model: str = ""
+
+    if user_id is not None:
+        ucfg = _load_user_config(user_id)
+        if ucfg:
+            # LLM connection — module-specific preset first, then generic fallback
+            preset_id = ucfg.get("summary_limit_llm_preset_id") or ucfg.get("llm_preset_id")
+            preset = _resolve_llm_preset(user_id, preset_id) if preset_id else {}
+            if preset:
+                key = (preset.get("api_key") or "").strip()
+                base = (preset.get("base_url") or "").strip()
+                model = (preset.get("model") or "").strip()
+                for k in ("temperature", "max_tokens", "input_hard_limit", "input_safety_margin"):
+                    if preset.get(k) is not None:
+                        cfg[k] = preset[k]
+            else:
+                key = (ucfg.get("llm_api_key") or "").strip()
+                base = (ucfg.get("llm_base_url") or "").strip()
+                model = (ucfg.get("llm_model") or "").strip()
+                for k in ("temperature", "max_tokens", "input_hard_limit", "input_safety_margin"):
+                    if ucfg.get(k) is not None:
+                        cfg[k] = ucfg[k]
+
+            # Section limits
+            limit_map = {
+                "intro": "section_limit_intro",
+                "method": "section_limit_method",
+                "findings": "section_limit_findings",
+                "opinion": "section_limit_opinion",
+            }
+            for sec, ukey in limit_map.items():
+                if ucfg.get(ukey) is not None:
+                    cfg["section_limits"][sec] = int(ucfg[ukey])
+            if ucfg.get("headline_limit") is not None:
+                cfg["headline_limit"] = int(ucfg["headline_limit"])
+
+            # Section prompts
+            prompt_map = {
+                "intro": "summary_limit_prompt_intro",
+                "method": "summary_limit_prompt_method",
+                "findings": "summary_limit_prompt_findings",
+                "opinion": "summary_limit_prompt_opinion",
+            }
+            for sec, ukey in prompt_map.items():
+                if ucfg.get(ukey):
+                    cfg["section_prompts"][sec] = ucfg[ukey]
+
+    # Resolve LLM credentials (fall back to config.py)
+    if not key or not base:
+        if SLLM == 2:
+            key = (summary_limit_gptgod_apikey or "").strip()
+            base = (summary_limit_url_2 or "").strip()
+            model = summary_limit_model_2
+        elif SLLM == 3:
+            key = (summary_limit_apikey_3 or "").strip()
+            base = (summary_limit_url_3 or "").strip()
+            model = summary_limit_model_3
+        else:
+            key = (qwen_api_key or "").strip()
+            base = (summary_limit_base_url or "").strip()
+            model = summary_limit_model
+    elif not model:
+        if SLLM == 2:
+            model = summary_limit_model_2
+        elif SLLM == 3:
+            model = summary_limit_model_3
+        else:
+            model = summary_limit_model
+
+    if not key:
+        raise SystemExit("LLM API key missing (summary_limit)")
+    if not base:
+        raise SystemExit("LLM base URL missing (summary_limit)")
+
+    cfg["api_key"] = key
+    cfg["base_url"] = base
+    cfg["model"] = model
+    return cfg
+
+
+def make_client_from_cfg(cfg: Dict[str, Any]) -> OpenAI:
+    return OpenAI(api_key=cfg["api_key"], base_url=cfg["base_url"])
 
 
 def approx_input_tokens(text: str) -> int:
@@ -115,33 +246,15 @@ def write_gather(single_dir: Path, gather_dir: Path, date_str: str) -> Path:
 
 
 def make_client() -> OpenAI:
-    # 根据 SLLM 选择不同的大模型服务与密钥
-    if SLLM == 2:
-        key = (summary_limit_gptgod_apikey or "").strip()
-        if not key:
-            raise SystemExit("summary_limit_gptgod_apikey missing in config.config")
-        base = (summary_limit_url_2 or "").strip()
-        if not base:
-            raise SystemExit("summary_limit_url_2 missing in config.config")
-    elif SLLM == 3:
-        key = (summary_limit_apikey_3 or "").strip()
-        if not key:
-            raise SystemExit("summary_limit_apikey_3 missing in config.config")
-        base = (summary_limit_url_3 or "").strip()
-        if not base:
-            raise SystemExit("summary_limit_url_3 missing in config.config")
-    else:
-        key = (qwen_api_key or "").strip()
-        if not key:
-            raise SystemExit("qwen_api_key missing in config.config")
-        base = (summary_limit_base_url or "").strip()
-        if not base:
-            raise SystemExit("summary_limit_base_url missing in config.config")
-    return OpenAI(api_key=key, base_url=base)
+    """Legacy entry-point – creates a client using config.py defaults."""
+    cfg = build_effective_cfg(user_id=None)
+    return make_client_from_cfg(cfg)
 
 
-def get_summary_limit_model() -> str:
-    """根据 SLLM 返回当前使用的摘要精简模型名称。"""
+def get_summary_limit_model(cfg: Optional[Dict[str, Any]] = None) -> str:
+    """Return the model name to use, honouring *cfg* overrides."""
+    if cfg and cfg.get("model"):
+        return cfg["model"]
     if SLLM == 2:
         return summary_limit_model_2
     if SLLM == 3:
@@ -320,24 +433,35 @@ def normalize_style(text: str) -> str:
     return "\n".join(out).strip() + "\n"
 
 
-def rewrite_block(client: OpenAI, text: str, sys_prompt: str, limit_chars: int, max_retries: int = 3) -> str:
+def rewrite_block(
+    client: OpenAI,
+    text: str,
+    sys_prompt: str,
+    limit_chars: int,
+    max_retries: int = 3,
+    *,
+    effective_cfg: Optional[Dict[str, Any]] = None,
+) -> str:
+    ecfg = effective_cfg or {}
     content = text.strip()
     if not content:
         return content
     for _ in range(max_retries):
-        hard_limit = int(summary_limit_input_hard_limit)
-        safety_margin = int(summary_limit_input_safety_margin)
+        hard_limit = int(ecfg.get("input_hard_limit") or summary_limit_input_hard_limit)
+        safety_margin = int(ecfg.get("input_safety_margin") or summary_limit_input_safety_margin)
         limit_total = hard_limit - safety_margin
         sys_tokens = approx_input_tokens(sys_prompt)
         user_budget = max(1, limit_total - sys_tokens)
         user_content = crop_to_input_tokens(content, user_budget)
-        kwargs = {}
-        if summary_limit_temperature is not None:
-            kwargs["temperature"] = float(summary_limit_temperature)
-        if summary_limit_max_tokens is not None:
-            kwargs["max_tokens"] = int(summary_limit_max_tokens)
+        temp = ecfg.get("temperature") if ecfg.get("temperature") is not None else summary_limit_temperature
+        max_tok = ecfg.get("max_tokens") if ecfg.get("max_tokens") is not None else summary_limit_max_tokens
+        kwargs: Dict[str, Any] = {}
+        if temp is not None:
+            kwargs["temperature"] = float(temp)
+        if max_tok is not None:
+            kwargs["max_tokens"] = int(max_tok)
         resp = client.chat.completions.create(
-            model=get_summary_limit_model(),
+            model=get_summary_limit_model(ecfg),
             messages=[
                 {"role": "system", "content": sys_prompt},
                 {"role": "user", "content": user_content},
@@ -354,32 +478,46 @@ def rewrite_block(client: OpenAI, text: str, sys_prompt: str, limit_chars: int, 
     return content
 
 
-def compress_headline(client: OpenAI, text: str) -> str:
+def compress_headline(
+    client: OpenAI,
+    text: str,
+    *,
+    effective_cfg: Optional[Dict[str, Any]] = None,
+) -> str:
+    ecfg = effective_cfg or {}
     sys_prompt = (summary_limit_prompt_headline or "").strip()
     content = text.strip()
     if not sys_prompt or not content:
         return text
-    hard_limit = int(summary_limit_input_hard_limit)
-    safety_margin = int(summary_limit_input_safety_margin)
+    hard_limit = int(ecfg.get("input_hard_limit") or summary_limit_input_hard_limit)
+    safety_margin = int(ecfg.get("input_safety_margin") or summary_limit_input_safety_margin)
     limit_total = hard_limit - safety_margin
     sys_tokens = approx_input_tokens(sys_prompt)
     user_budget = max(1, limit_total - sys_tokens)
     user_content = crop_to_input_tokens(content, user_budget)
+    max_tok = ecfg.get("max_tokens") if ecfg.get("max_tokens") is not None else summary_limit_max_tokens
     resp = client.chat.completions.create(
-        model=get_summary_limit_model(),
+        model=get_summary_limit_model(ecfg),
         messages=[
             {"role": "system", "content": sys_prompt},
             {"role": "user", "content": user_content},
         ],
         stream=False,
-        max_tokens=summary_limit_max_tokens or 2048,
+        max_tokens=max_tok or 2048,
         temperature=0,
     )
     new_text = resp.choices[0].message.content if resp.choices else ""
     return new_text.strip() if new_text else text
 
 
-def apply_headline_limit(client: OpenAI, lines: List[str]) -> List[str]:
+def apply_headline_limit(
+    client: OpenAI,
+    lines: List[str],
+    *,
+    effective_cfg: Optional[Dict[str, Any]] = None,
+) -> List[str]:
+    ecfg = effective_cfg or {}
+    hl_limit = int(ecfg.get("headline_limit") or summary_limit_headline_limit)
     title_idx = None
     for idx, line in enumerate(lines):
         if line.strip().startswith("📖标题"):
@@ -391,9 +529,9 @@ def apply_headline_limit(client: OpenAI, lines: List[str]) -> List[str]:
         candidate = lines[prev_idx].strip()
         if not candidate:
             continue
-        if non_ws_len(candidate) <= summary_limit_headline_limit:
+        if non_ws_len(candidate) <= hl_limit:
             return lines
-        lines[prev_idx] = compress_headline(client, candidate) + "\n"
+        lines[prev_idx] = compress_headline(client, candidate, effective_cfg=ecfg) + "\n"
         return lines
     return lines
 
@@ -494,21 +632,27 @@ def inject_pdf_info(text: str, md_path: Path, pdf_info_map: Dict[str, Dict[str, 
     return "\n".join(lines).rstrip() + "\n"
 
 
-def structure_matches_example(client: OpenAI, text: str) -> bool:
+def structure_matches_example(
+    client: OpenAI,
+    text: str,
+    *,
+    effective_cfg: Optional[Dict[str, Any]] = None,
+) -> bool:
+    ecfg = effective_cfg or {}
     sys_prompt = (summary_limit_prompt_structure_check or "").strip()
     if not sys_prompt:
         return True
     content = text.strip()
     if not content:
         return False
-    hard_limit = int(summary_limit_input_hard_limit)
-    safety_margin = int(summary_limit_input_safety_margin)
+    hard_limit = int(ecfg.get("input_hard_limit") or summary_limit_input_hard_limit)
+    safety_margin = int(ecfg.get("input_safety_margin") or summary_limit_input_safety_margin)
     limit_total = hard_limit - safety_margin
     sys_tokens = approx_input_tokens(sys_prompt)
     user_budget = max(1, limit_total - sys_tokens)
     user_content = crop_to_input_tokens(content, user_budget)
     resp = client.chat.completions.create(
-        model=get_summary_limit_model(),
+        model=get_summary_limit_model(ecfg),
         messages=[
             {"role": "system", "content": sys_prompt},
             {"role": "user", "content": user_content},
@@ -521,27 +665,34 @@ def structure_matches_example(client: OpenAI, text: str) -> bool:
     return reply.startswith("YES")
 
 
-def restructure_to_example(client: OpenAI, text: str) -> str:
+def restructure_to_example(
+    client: OpenAI,
+    text: str,
+    *,
+    effective_cfg: Optional[Dict[str, Any]] = None,
+) -> str:
+    ecfg = effective_cfg or {}
     sys_prompt = (summary_limit_prompt_structure_rewrite or "").strip()
     if not sys_prompt:
         return text
     content = text.strip()
     if not content:
         return text
-    hard_limit = int(summary_limit_input_hard_limit)
-    safety_margin = int(summary_limit_input_safety_margin)
+    hard_limit = int(ecfg.get("input_hard_limit") or summary_limit_input_hard_limit)
+    safety_margin = int(ecfg.get("input_safety_margin") or summary_limit_input_safety_margin)
     limit_total = hard_limit - safety_margin
     sys_tokens = approx_input_tokens(sys_prompt)
     user_budget = max(1, limit_total - sys_tokens)
     user_content = crop_to_input_tokens(content, user_budget)
+    max_tok = ecfg.get("max_tokens") if ecfg.get("max_tokens") is not None else summary_limit_max_tokens
     resp = client.chat.completions.create(
-        model=get_summary_limit_model(),
+        model=get_summary_limit_model(ecfg),
         messages=[
             {"role": "system", "content": sys_prompt},
             {"role": "user", "content": user_content},
         ],
         stream=False,
-        max_tokens=summary_limit_max_tokens or 2048,
+        max_tokens=max_tok or 2048,
         temperature=0,
     )
     new_text = resp.choices[0].message.content if resp.choices else ""
@@ -553,7 +704,13 @@ def process_one(
     md_path: Path,
     out_path: Path,
     pdf_info_map: Dict[str, Dict[str, str]],
+    *,
+    effective_cfg: Optional[Dict[str, Any]] = None,
 ) -> Tuple[Path, str]:
+    ecfg = effective_cfg or {}
+    sec_limits = ecfg.get("section_limits", SECTION_LIMITS_DEFAULT)
+    sec_prompts = ecfg.get("section_prompts", SECTION_PROMPTS_DEFAULT)
+
     text = md_path.read_text(encoding="utf-8", errors="ignore")
     if not text.strip():
         out_path.write_text("", encoding="utf-8")
@@ -562,9 +719,9 @@ def process_one(
     text = inject_pdf_info(text, md_path, pdf_info_map)
     base_text = normalize_style(text)
     lines = base_text.splitlines(keepends=True)
-    lines = apply_headline_limit(client, lines)
+    lines = apply_headline_limit(client, lines, effective_cfg=ecfg)
     base_text = "".join(lines)
-    if structure_matches_example(client, base_text):
+    if structure_matches_example(client, base_text, effective_cfg=ecfg):
         prefix, sections = split_sections(lines)
         if sections:
             out_lines: List[str] = []
@@ -575,11 +732,14 @@ def process_one(
                     out_lines.append("\n")
                 out_lines.append(heading)
                 block_text = "".join(content_lines).strip()
-                limit = SECTION_LIMITS.get(key, 0)
+                limit = sec_limits.get(key, 0)
                 if limit and non_ws_len(block_text) > limit:
-                    sys_prompt = SECTION_PROMPTS.get(key, "")
+                    sys_prompt = sec_prompts.get(key, "")
                     if sys_prompt:
-                        block_text = rewrite_block(client, block_text, sys_prompt, limit_chars=limit)
+                        block_text = rewrite_block(
+                            client, block_text, sys_prompt, limit_chars=limit,
+                            effective_cfg=ecfg,
+                        )
                         rewritten_any = True
                 if block_text:
                     if not block_text.endswith("\n"):
@@ -588,7 +748,7 @@ def process_one(
             out_text = ensure_section_spacing("".join(out_lines))
             status = "rewritten" if rewritten_any else "copied"
     else:
-        out_text = restructure_to_example(client, base_text)
+        out_text = restructure_to_example(client, base_text, effective_cfg=ecfg)
         out_text = ensure_section_spacing(normalize_style(out_text))
         status = "rewritten"
 
@@ -603,6 +763,7 @@ def run() -> None:
     ap.add_argument("--out-root", default=str(Path(DATA_ROOT) / "summary_limit"))
     ap.add_argument("--date", default="")
     ap.add_argument("--concurrency", type=int, default=summary_limit_concurrency)
+    ap.add_argument("--user-id", type=int, default=None, help="User ID for per-user config overrides")
     args = ap.parse_args()
 
     in_root = Path(args.input_dir)
@@ -664,9 +825,10 @@ def run() -> None:
         print(f"[SUMMARY_LIMIT] gather_path={gather_path}", flush=True)
         return
 
-    client = make_client()
+    ecfg = build_effective_cfg(user_id=args.user_id)
+    client = make_client_from_cfg(ecfg)
     workers = max(1, int(args.concurrency or 0))
-    print(f"[SUMMARY_LIMIT] input_dir={in_dir} total={total} concurrency={workers}", flush=True)
+    print(f"[SUMMARY_LIMIT] input_dir={in_dir} total={total} concurrency={workers} user_id={args.user_id}", flush=True)
 
     start = time.monotonic()
     done = 0
@@ -676,7 +838,7 @@ def run() -> None:
 
     with ThreadPoolExecutor(max_workers=workers) as ex:
         future_map = {
-            ex.submit(process_one, client, p, single_dir / f"{p.stem}.md", pdf_info_map): p
+            ex.submit(process_one, client, p, single_dir / f"{p.stem}.md", pdf_info_map, effective_cfg=ecfg): p
             for p in to_run
         }
         for fut in as_completed(future_map):

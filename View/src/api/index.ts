@@ -419,6 +419,12 @@ export async function runPipeline(params: {
   date?: string
   sllm?: number | null
   zo?: string
+  // Arxiv 检索参数
+  days?: number | null
+  categories?: string | null
+  extra_query?: string | null
+  max_papers?: number | null
+  anchor_tz?: string | null
 }): Promise<{ ok: boolean; message: string }> {
   const { data } = await http.post<{ ok: boolean; message: string }>('/admin/pipeline/run', params)
   return data
@@ -493,5 +499,228 @@ export async function updateSystemConfig(config: Record<string, any>): Promise<S
 /** 重置系统配置为默认值 */
 export async function resetSystemConfig(): Promise<{ ok: boolean; message: string }> {
   const { data } = await http.post<{ ok: boolean; message: string }>('/admin/config/reset')
+  return data
+}
+
+// ---------------------------------------------------------------------------
+// LLM Config API
+// ---------------------------------------------------------------------------
+
+export interface LlmConfig {
+  id: number
+  name: string
+  remark?: string
+  base_url: string
+  api_key: string
+  model: string
+  max_tokens?: number
+  temperature?: number
+  concurrency?: number
+  input_hard_limit?: number
+  input_safety_margin?: number
+  endpoint?: string
+  completion_window?: string
+  out_root?: string
+  jsonl_root?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface LlmConfigsResponse {
+  ok: boolean
+  configs: LlmConfig[]
+}
+
+export interface LlmConfigResponse {
+  ok: boolean
+  config: LlmConfig
+}
+
+export interface ApplyLlmConfigResponse {
+  ok: boolean
+  message: string
+  config: Record<string, any>
+}
+
+/** 获取所有模型配置 */
+export async function fetchLlmConfigs(): Promise<LlmConfigsResponse> {
+  const { data } = await http.get<LlmConfigsResponse>('/admin/llm-configs')
+  return data
+}
+
+/** 获取单个模型配置 */
+export async function fetchLlmConfig(configId: number): Promise<LlmConfigResponse> {
+  const { data } = await http.get<LlmConfigResponse>(`/admin/llm-configs/${configId}`)
+  return data
+}
+
+/** 创建模型配置 */
+export async function createLlmConfig(config: Omit<LlmConfig, 'id' | 'created_at' | 'updated_at'>): Promise<LlmConfigResponse> {
+  const { data } = await http.post<LlmConfigResponse>('/admin/llm-configs', config)
+  return data
+}
+
+/** 更新模型配置 */
+export async function updateLlmConfig(configId: number, config: Partial<LlmConfig>): Promise<LlmConfigResponse> {
+  const { data } = await http.put<LlmConfigResponse>(`/admin/llm-configs/${configId}`, config)
+  return data
+}
+
+/** 删除模型配置 */
+export async function deleteLlmConfig(configId: number): Promise<{ ok: boolean; message: string }> {
+  const { data } = await http.delete<{ ok: boolean; message: string }>(`/admin/llm-configs/${configId}`)
+  return data
+}
+
+/** 应用模型配置到config.py */
+export async function applyLlmConfig(configId: number, usagePrefix: string): Promise<ApplyLlmConfigResponse> {
+  const { data } = await http.post<ApplyLlmConfigResponse>(`/admin/llm-configs/${configId}/apply`, {
+    usage_prefix: usagePrefix,
+  })
+  return data
+}
+
+// ---------------------------------------------------------------------------
+// Prompt Config API
+// ---------------------------------------------------------------------------
+
+export interface PromptConfig {
+  id: number
+  name: string
+  remark?: string
+  prompt_content: string
+  created_at: string
+  updated_at: string
+}
+
+export interface PromptConfigsResponse {
+  ok: boolean
+  configs: PromptConfig[]
+}
+
+export interface PromptConfigResponse {
+  ok: boolean
+  config: PromptConfig
+}
+
+export interface ApplyPromptConfigResponse {
+  ok: boolean
+  message: string
+  config: Record<string, any>
+}
+
+/** 获取所有提示词配置 */
+export async function fetchPromptConfigs(): Promise<PromptConfigsResponse> {
+  const { data } = await http.get<PromptConfigsResponse>('/admin/prompt-configs')
+  return data
+}
+
+/** 获取单个提示词配置 */
+export async function fetchPromptConfig(configId: number): Promise<PromptConfigResponse> {
+  const { data } = await http.get<PromptConfigResponse>(`/admin/prompt-configs/${configId}`)
+  return data
+}
+
+/** 创建提示词配置 */
+export async function createPromptConfig(config: Omit<PromptConfig, 'id' | 'created_at' | 'updated_at'>): Promise<PromptConfigResponse> {
+  const { data } = await http.post<PromptConfigResponse>('/admin/prompt-configs', config)
+  return data
+}
+
+/** 更新提示词配置 */
+export async function updatePromptConfig(configId: number, config: Partial<PromptConfig>): Promise<PromptConfigResponse> {
+  const { data } = await http.put<PromptConfigResponse>(`/admin/prompt-configs/${configId}`, config)
+  return data
+}
+
+/** 删除提示词配置 */
+export async function deletePromptConfig(configId: number): Promise<{ ok: boolean; message: string }> {
+  const { data } = await http.delete<{ ok: boolean; message: string }>(`/admin/prompt-configs/${configId}`)
+  return data
+}
+
+/** 应用提示词配置到config.py */
+export async function applyPromptConfig(configId: number, variableName: string): Promise<ApplyPromptConfigResponse> {
+  const { data } = await http.post<ApplyPromptConfigResponse>(`/admin/prompt-configs/${configId}/apply`, {
+    variable_name: variableName,
+  })
+  return data
+}
+
+// ---------------------------------------------------------------------------
+// User LLM Presets API
+// ---------------------------------------------------------------------------
+
+import type { UserLlmPreset, UserPromptPreset } from '../types/paper'
+
+export interface UserLlmPresetsResponse {
+  ok: boolean
+  presets: UserLlmPreset[]
+}
+
+export interface UserLlmPresetResponse {
+  ok: boolean
+  preset: UserLlmPreset
+}
+
+/** 获取用户的所有模型预设 */
+export async function fetchUserLlmPresets(): Promise<UserLlmPresetsResponse> {
+  const { data } = await http.get<UserLlmPresetsResponse>('/user/llm-presets')
+  return data
+}
+
+/** 创建模型预设 */
+export async function createUserLlmPreset(preset: Omit<UserLlmPreset, 'id' | 'user_id' | 'created_at' | 'updated_at'>): Promise<UserLlmPresetResponse> {
+  const { data } = await http.post<UserLlmPresetResponse>('/user/llm-presets', preset)
+  return data
+}
+
+/** 更新模型预设 */
+export async function updateUserLlmPreset(presetId: number, preset: Partial<UserLlmPreset>): Promise<UserLlmPresetResponse> {
+  const { data } = await http.put<UserLlmPresetResponse>(`/user/llm-presets/${presetId}`, preset)
+  return data
+}
+
+/** 删除模型预设 */
+export async function deleteUserLlmPreset(presetId: number): Promise<{ ok: boolean }> {
+  const { data } = await http.delete<{ ok: boolean }>(`/user/llm-presets/${presetId}`)
+  return data
+}
+
+// ---------------------------------------------------------------------------
+// User Prompt Presets API
+// ---------------------------------------------------------------------------
+
+export interface UserPromptPresetsResponse {
+  ok: boolean
+  presets: UserPromptPreset[]
+}
+
+export interface UserPromptPresetResponse {
+  ok: boolean
+  preset: UserPromptPreset
+}
+
+/** 获取用户的所有提示词预设 */
+export async function fetchUserPromptPresets(): Promise<UserPromptPresetsResponse> {
+  const { data } = await http.get<UserPromptPresetsResponse>('/user/prompt-presets')
+  return data
+}
+
+/** 创建提示词预设 */
+export async function createUserPromptPreset(preset: Omit<UserPromptPreset, 'id' | 'user_id' | 'created_at' | 'updated_at'>): Promise<UserPromptPresetResponse> {
+  const { data } = await http.post<UserPromptPresetResponse>('/user/prompt-presets', preset)
+  return data
+}
+
+/** 更新提示词预设 */
+export async function updateUserPromptPreset(presetId: number, preset: Partial<UserPromptPreset>): Promise<UserPromptPresetResponse> {
+  const { data } = await http.put<UserPromptPresetResponse>(`/user/prompt-presets/${presetId}`, preset)
+  return data
+}
+
+/** 删除提示词预设 */
+export async function deleteUserPromptPreset(presetId: number): Promise<{ ok: boolean }> {
+  const { data } = await http.delete<{ ok: boolean }>(`/user/prompt-presets/${presetId}`)
   return data
 }

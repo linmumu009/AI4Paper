@@ -28,6 +28,10 @@ from services import kb_service
 from services import compare_service
 from services import user_settings_service
 from services import config_service
+from services import llm_config_service
+from services import prompt_config_service
+from services import config_mapper
+from services import user_presets_service
 
 app = FastAPI(
     title="ArxivPaper4 API",
@@ -38,8 +42,10 @@ app = FastAPI(
 
 @app.on_event("startup")
 async def startup_event():
-    """应用启动时加载配置。"""
+    """应用启动时加载配置并初始化数据库表。"""
     config_service.load_config()
+    llm_config_service.init_db()
+    prompt_config_service.init_db()
 
 # CORS — allow Vue dev server
 app.add_middleware(
@@ -89,6 +95,13 @@ class RunPipelineBody(BaseModel):
     date: Optional[str] = None
     sllm: Optional[int] = None
     zo: Optional[str] = Field(default="F", pattern="^[TF]$")
+    user_id: Optional[int] = Field(default=None, description="User ID for per-user config overrides (paper_recommend)")
+    # Arxiv 检索参数（透传给第一步 arxiv_search04.py）
+    days: Optional[int] = Field(default=None, ge=1, le=30, description="时间窗口天数（--days），默认 1 天")
+    categories: Optional[str] = Field(default=None, description="arXiv 分类列表，逗号分隔，如 cs.AI,cs.LG")
+    extra_query: Optional[str] = Field(default=None, description="附加关键词/高级表达式（--query）")
+    max_papers: Optional[int] = Field(default=None, ge=1, le=5000, description="最多获取论文数（--max-papers）")
+    anchor_tz: Optional[str] = Field(default=None, description="锚定时区（--anchor-tz），如 Asia/Shanghai")
 
 class ScheduleConfigBody(BaseModel):
     enabled: bool
@@ -201,6 +214,86 @@ def api_save_user_settings(feature: str, body: UserSettingsBody, _user=Depends(a
 
 
 # ---------------------------------------------------------------------------
+# User LLM Presets
+# ---------------------------------------------------------------------------
+
+class UserLlmPresetBody(BaseModel):
+    name: str = Field(..., min_length=1, max_length=64)
+    base_url: str = ""
+    api_key: str = ""
+    model: str = ""
+    max_tokens: Optional[int] = None
+    temperature: Optional[float] = None
+    input_hard_limit: Optional[int] = None
+    input_safety_margin: Optional[int] = None
+
+
+@app.get("/api/user/llm-presets", summary="List user LLM presets")
+def api_user_list_llm_presets(_user=Depends(auth_service.require_user)):
+    presets = user_presets_service.list_llm_presets(_user["id"])
+    return {"ok": True, "presets": presets}
+
+
+@app.post("/api/user/llm-presets", summary="Create LLM preset")
+def api_user_create_llm_preset(body: UserLlmPresetBody, _user=Depends(auth_service.require_user)):
+    preset = user_presets_service.create_llm_preset(_user["id"], body.dict())
+    return {"ok": True, "preset": preset}
+
+
+@app.put("/api/user/llm-presets/{preset_id}", summary="Update LLM preset")
+def api_user_update_llm_preset(preset_id: int, body: UserLlmPresetBody, _user=Depends(auth_service.require_user)):
+    preset = user_presets_service.update_llm_preset(_user["id"], preset_id, body.dict())
+    if preset is None:
+        raise HTTPException(status_code=404, detail="预设不存在")
+    return {"ok": True, "preset": preset}
+
+
+@app.delete("/api/user/llm-presets/{preset_id}", summary="Delete LLM preset")
+def api_user_delete_llm_preset(preset_id: int, _user=Depends(auth_service.require_user)):
+    ok = user_presets_service.delete_llm_preset(_user["id"], preset_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="预设不存在")
+    return {"ok": True}
+
+
+# ---------------------------------------------------------------------------
+# User Prompt Presets
+# ---------------------------------------------------------------------------
+
+class UserPromptPresetBody(BaseModel):
+    name: str = Field(..., min_length=1, max_length=64)
+    prompt_content: str = ""
+
+
+@app.get("/api/user/prompt-presets", summary="List user prompt presets")
+def api_user_list_prompt_presets(_user=Depends(auth_service.require_user)):
+    presets = user_presets_service.list_prompt_presets(_user["id"])
+    return {"ok": True, "presets": presets}
+
+
+@app.post("/api/user/prompt-presets", summary="Create prompt preset")
+def api_user_create_prompt_preset(body: UserPromptPresetBody, _user=Depends(auth_service.require_user)):
+    preset = user_presets_service.create_prompt_preset(_user["id"], body.dict())
+    return {"ok": True, "preset": preset}
+
+
+@app.put("/api/user/prompt-presets/{preset_id}", summary="Update prompt preset")
+def api_user_update_prompt_preset(preset_id: int, body: UserPromptPresetBody, _user=Depends(auth_service.require_user)):
+    preset = user_presets_service.update_prompt_preset(_user["id"], preset_id, body.dict())
+    if preset is None:
+        raise HTTPException(status_code=404, detail="预设不存在")
+    return {"ok": True, "preset": preset}
+
+
+@app.delete("/api/user/prompt-presets/{preset_id}", summary="Delete prompt preset")
+def api_user_delete_prompt_preset(preset_id: int, _user=Depends(auth_service.require_user)):
+    ok = user_presets_service.delete_prompt_preset(_user["id"], preset_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="预设不存在")
+    return {"ok": True}
+
+
+# ---------------------------------------------------------------------------
 # Admin API
 # ---------------------------------------------------------------------------
 
@@ -291,16 +384,42 @@ def _save_schedule_config(cfg: dict) -> None:
         json.dump(cfg, f, ensure_ascii=False, indent=2)
 
 
-def _run_pipeline_thread(pipeline: str, date_str: str, sllm: Optional[int], zo: str):
+def _run_pipeline_thread(
+    pipeline: str,
+    date_str: str,
+    sllm: Optional[int],
+    zo: str,
+    user_id: Optional[int] = None,
+    days: Optional[int] = None,
+    categories: Optional[str] = None,
+    extra_query: Optional[str] = None,
+    max_papers: Optional[int] = None,
+    anchor_tz: Optional[str] = None,
+):
     """Execute pipeline in a background thread, capturing output line by line."""
     global _pipeline_state
     cmd = [sys.executable, "-u", _APP_PY_PATH, pipeline, "--date", date_str, "--Zo", zo]
     if sllm is not None:
         cmd.extend(["--SLLM", str(sllm)])
+    if user_id is not None:
+        cmd.extend(["--user-id", str(user_id)])
+    # Arxiv 检索参数（透传给第一步 arxiv_search04.py）
+    if days is not None:
+        cmd.extend(["--days", str(days)])
+    if categories:
+        cmd.extend(["--categories", categories])
+    if extra_query:
+        cmd.extend(["--query", extra_query])
+    if max_papers is not None:
+        cmd.extend(["--max-papers", str(max_papers)])
+    if anchor_tz:
+        cmd.extend(["--anchor-tz", anchor_tz])
 
-    env = {**os.environ, "RUN_DATE": date_str}
+    env = {**os.environ, "RUN_DATE": date_str, "PYTHONIOENCODING": "utf-8"}
     if sllm is not None:
         env["SLLM"] = str(sllm)
+    if user_id is not None:
+        env["PIPELINE_USER_ID"] = str(user_id)
 
     with _pipeline_lock:
         _pipeline_state["running"] = True
@@ -309,7 +428,18 @@ def _run_pipeline_thread(pipeline: str, date_str: str, sllm: Optional[int], zo: 
         _pipeline_state["started_at"] = datetime.now(timezone.utc).isoformat()
         _pipeline_state["finished_at"] = None
         _pipeline_state["exit_code"] = None
-        _pipeline_state["params"] = {"pipeline": pipeline, "date": date_str, "sllm": sllm, "zo": zo}
+        _pipeline_state["params"] = {
+            "pipeline": pipeline,
+            "date": date_str,
+            "sllm": sllm,
+            "zo": zo,
+            "user_id": user_id,
+            "days": days,
+            "categories": categories,
+            "extra_query": extra_query,
+            "max_papers": max_papers,
+            "anchor_tz": anchor_tz,
+        }
 
     try:
         proc = subprocess.Popen(
@@ -325,10 +455,25 @@ def _run_pipeline_thread(pipeline: str, date_str: str, sllm: Optional[int], zo: 
         with _pipeline_lock:
             _pipeline_state["process"] = proc
 
+        def _is_progress_line(s: str) -> bool:
+            """Return True if s looks like an in-place progress update."""
+            return " progress done=" in s or "[PROGRESS] " in s
+
         for line in proc.stdout:
             line = line.rstrip("\n")
             with _pipeline_lock:
-                _pipeline_state["logs"].append(f"[{datetime.now().strftime('%H:%M:%S')}] {line}")
+                log_line = f"[{datetime.now().strftime('%H:%M:%S')}] {line}"
+                # If both the current line and the last logged line are progress
+                # updates, replace the last entry instead of appending, so the
+                # log stays compact (mirrors \r in-place terminal behaviour).
+                if (
+                    _is_progress_line(line)
+                    and _pipeline_state["logs"]
+                    and _is_progress_line(_pipeline_state["logs"][-1])
+                ):
+                    _pipeline_state["logs"][-1] = log_line
+                else:
+                    _pipeline_state["logs"].append(log_line)
                 # Keep last 500 lines
                 if len(_pipeline_state["logs"]) > 500:
                     _pipeline_state["logs"] = _pipeline_state["logs"][-500:]
@@ -411,9 +556,22 @@ def api_admin_run_pipeline(
             raise HTTPException(status_code=409, detail="Pipeline 正在运行中，请等待完成")
 
     date_str = body.date or datetime.now().date().isoformat()
+    # Use user_id from body, or fall back to the calling admin's ID
+    pipeline_user_id = body.user_id if body.user_id is not None else _admin.get("id")
     t = threading.Thread(
         target=_run_pipeline_thread,
-        args=(body.pipeline, date_str, body.sllm, body.zo or "F"),
+        kwargs={
+            "pipeline": body.pipeline,
+            "date_str": date_str,
+            "sllm": body.sllm,
+            "zo": body.zo or "F",
+            "user_id": pipeline_user_id,
+            "days": body.days,
+            "categories": body.categories,
+            "extra_query": body.extra_query,
+            "max_papers": body.max_papers,
+            "anchor_tz": body.anchor_tz,
+        },
         daemon=True,
     )
     t.start()
@@ -550,6 +708,239 @@ def api_admin_reset_config(
         return {"ok": True, "message": "配置已重置为默认值"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"重置配置失败: {str(e)}")
+
+
+# ---------------------------------------------------------------------------
+# LLM Config Management
+# ---------------------------------------------------------------------------
+
+class LlmConfigBody(BaseModel):
+    name: str = Field(..., description="配置名称")
+    remark: Optional[str] = Field(None, description="备注")
+    base_url: str = Field(..., description="API基础地址")
+    api_key: str = Field(..., description="API密钥")
+    model: str = Field(..., description="模型名称")
+    max_tokens: Optional[int] = None
+    temperature: Optional[float] = None
+    concurrency: Optional[int] = None
+    input_hard_limit: Optional[int] = None
+    input_safety_margin: Optional[int] = None
+    endpoint: Optional[str] = None
+    completion_window: Optional[str] = None
+    out_root: Optional[str] = None
+    jsonl_root: Optional[str] = None
+
+
+class ApplyLlmConfigBody(BaseModel):
+    usage_prefix: str = Field(..., description="使用前缀（如 theme_select, org, summary 等）")
+
+
+@app.get("/api/admin/llm-configs", summary="Get all LLM configs")
+def api_admin_list_llm_configs(
+    _admin=Depends(auth_service.require_admin_user),
+):
+    """获取所有模型配置列表。"""
+    try:
+        configs = llm_config_service.list_configs()
+        return {"ok": True, "configs": configs}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取配置列表失败: {str(e)}")
+
+
+@app.get("/api/admin/llm-configs/{config_id}", summary="Get LLM config by ID")
+def api_admin_get_llm_config(
+    config_id: int,
+    _admin=Depends(auth_service.require_admin_user),
+):
+    """获取单个模型配置。"""
+    try:
+        config = llm_config_service.get_config(config_id)
+        if not config:
+            raise HTTPException(status_code=404, detail=f"模型配置 {config_id} 不存在")
+        return {"ok": True, "config": config}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取配置失败: {str(e)}")
+
+
+@app.post("/api/admin/llm-configs", summary="Create LLM config")
+def api_admin_create_llm_config(
+    body: LlmConfigBody,
+    _admin=Depends(auth_service.require_admin_user),
+):
+    """创建新的模型配置。"""
+    try:
+        config = llm_config_service.create_config(body.dict())
+        return {"ok": True, "config": config}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"创建配置失败: {str(e)}")
+
+
+@app.put("/api/admin/llm-configs/{config_id}", summary="Update LLM config")
+def api_admin_update_llm_config(
+    config_id: int,
+    body: LlmConfigBody,
+    _admin=Depends(auth_service.require_admin_user),
+):
+    """更新模型配置。"""
+    try:
+        config = llm_config_service.update_config(config_id, body.dict(exclude_unset=True))
+        if not config:
+            raise HTTPException(status_code=404, detail=f"模型配置 {config_id} 不存在")
+        return {"ok": True, "config": config}
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"更新配置失败: {str(e)}")
+
+
+@app.delete("/api/admin/llm-configs/{config_id}", summary="Delete LLM config")
+def api_admin_delete_llm_config(
+    config_id: int,
+    _admin=Depends(auth_service.require_admin_user),
+):
+    """删除模型配置。"""
+    try:
+        success = llm_config_service.delete_config(config_id)
+        if not success:
+            raise HTTPException(status_code=404, detail=f"模型配置 {config_id} 不存在")
+        return {"ok": True, "message": "配置已删除"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"删除配置失败: {str(e)}")
+
+
+@app.post("/api/admin/llm-configs/{config_id}/apply", summary="Apply LLM config to config.py")
+def api_admin_apply_llm_config(
+    config_id: int,
+    body: ApplyLlmConfigBody,
+    _admin=Depends(auth_service.require_admin_user),
+):
+    """应用模型配置到config.py（根据usage_prefix前缀映射）。"""
+    try:
+        updated = config_mapper.apply_llm_config(config_id, body.usage_prefix)
+        return {"ok": True, "message": f"配置已应用到 {body.usage_prefix} 前缀", "config": updated}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"应用配置失败: {str(e)}")
+
+
+# ---------------------------------------------------------------------------
+# Prompt Config Management
+# ---------------------------------------------------------------------------
+
+class PromptConfigBody(BaseModel):
+    name: str = Field(..., description="配置名称")
+    remark: Optional[str] = Field(None, description="备注")
+    prompt_content: str = Field(..., description="提示词内容")
+
+
+class ApplyPromptConfigBody(BaseModel):
+    variable_name: str = Field(..., description="目标变量名（如 theme_select_system_prompt, system_prompt 等）")
+
+
+@app.get("/api/admin/prompt-configs", summary="Get all prompt configs")
+def api_admin_list_prompt_configs(
+    _admin=Depends(auth_service.require_admin_user),
+):
+    """获取所有提示词配置列表。"""
+    try:
+        configs = prompt_config_service.list_configs()
+        return {"ok": True, "configs": configs}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取配置列表失败: {str(e)}")
+
+
+@app.get("/api/admin/prompt-configs/{config_id}", summary="Get prompt config by ID")
+def api_admin_get_prompt_config(
+    config_id: int,
+    _admin=Depends(auth_service.require_admin_user),
+):
+    """获取单个提示词配置。"""
+    try:
+        config = prompt_config_service.get_config(config_id)
+        if not config:
+            raise HTTPException(status_code=404, detail=f"提示词配置 {config_id} 不存在")
+        return {"ok": True, "config": config}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取配置失败: {str(e)}")
+
+
+@app.post("/api/admin/prompt-configs", summary="Create prompt config")
+def api_admin_create_prompt_config(
+    body: PromptConfigBody,
+    _admin=Depends(auth_service.require_admin_user),
+):
+    """创建新的提示词配置。"""
+    try:
+        config = prompt_config_service.create_config(body.dict())
+        return {"ok": True, "config": config}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"创建配置失败: {str(e)}")
+
+
+@app.put("/api/admin/prompt-configs/{config_id}", summary="Update prompt config")
+def api_admin_update_prompt_config(
+    config_id: int,
+    body: PromptConfigBody,
+    _admin=Depends(auth_service.require_admin_user),
+):
+    """更新提示词配置。"""
+    try:
+        config = prompt_config_service.update_config(config_id, body.dict(exclude_unset=True))
+        if not config:
+            raise HTTPException(status_code=404, detail=f"提示词配置 {config_id} 不存在")
+        return {"ok": True, "config": config}
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"更新配置失败: {str(e)}")
+
+
+@app.delete("/api/admin/prompt-configs/{config_id}", summary="Delete prompt config")
+def api_admin_delete_prompt_config(
+    config_id: int,
+    _admin=Depends(auth_service.require_admin_user),
+):
+    """删除提示词配置。"""
+    try:
+        success = prompt_config_service.delete_config(config_id)
+        if not success:
+            raise HTTPException(status_code=404, detail=f"提示词配置 {config_id} 不存在")
+        return {"ok": True, "message": "配置已删除"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"删除配置失败: {str(e)}")
+
+
+@app.post("/api/admin/prompt-configs/{config_id}/apply", summary="Apply prompt config to config.py")
+def api_admin_apply_prompt_config(
+    config_id: int,
+    body: ApplyPromptConfigBody,
+    _admin=Depends(auth_service.require_admin_user),
+):
+    """应用提示词配置到config.py（根据variable_name映射）。"""
+    try:
+        updated = config_mapper.apply_prompt_config(config_id, body.variable_name)
+        return {"ok": True, "message": f"配置已应用到变量 {body.variable_name}", "config": updated}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"应用配置失败: {str(e)}")
 
 
 @app.get("/api/dates", summary="List available dates")

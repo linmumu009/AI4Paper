@@ -72,8 +72,21 @@ def init_db() -> None:
 
 # Keys that should NEVER be filled with defaults (user must provide them).
 _NO_DEFAULT_KEYS: dict[str, set[str]] = {
-    "compare": {"llm_base_url", "llm_api_key", "llm_model"},
-    "inspiration": {"llm_base_url", "llm_api_key", "llm_model"},
+    "compare": {"llm_base_url", "llm_api_key", "llm_model", "llm_preset_id", "prompt_preset_id"},
+    "inspiration": {"llm_base_url", "llm_api_key", "llm_model", "llm_preset_id", "prompt_preset_id"},
+    "paper_recommend": {
+        "llm_base_url", "llm_api_key", "llm_model", "llm_preset_id", "prompt_preset_id",
+        # Per-module LLM preset IDs
+        "theme_select_llm_preset_id", "org_llm_preset_id",
+        "summary_llm_preset_id", "summary_limit_llm_preset_id",
+        # Per-module prompt preset IDs
+        "theme_select_prompt_preset_id", "org_prompt_preset_id",
+        "summary_prompt_preset_id",
+        "summary_limit_prompt_intro_preset_id", "summary_limit_prompt_method_preset_id",
+        "summary_limit_prompt_findings_preset_id", "summary_limit_prompt_opinion_preset_id",
+        # MinerU 服务密钥
+        "mineru_token",
+    },
 }
 
 _COMPARE_SYSTEM_PROMPT_DEFAULT = """\
@@ -142,6 +155,58 @@ _INSPIRATION_SYSTEM_PROMPT_DEFAULT = """\
 - 控制总篇幅在 1500 字以内
 """
 
+_PAPER_RECOMMEND_SYSTEM_PROMPT_DEFAULT = (
+    "你是一个论文笔记助手，请阅读论文内容，严格按照格式写这篇论文的笔记，"
+    "不要带有markdown格式，字数控制在900字以内。格式如下："
+    "笔记标题：（10个字左右的中文短句说明论文的贡献）\n"
+    "🛎️文章简介\n"
+    "🔸研究问题：（用一个问句描述论文试图解决什么问题）\n"
+    "🔸主要贡献：（一句话回答这篇论文有什么贡献）\n"
+    "📝重点思路 （逐条写论文的研究方法是什么，每一条都以🔸开头）\n"
+    "🔎分析总结 （逐条写论文通过实验分析得到了哪些结论，每一条都以🔸开头）\n"
+    "💡个人观点\n"
+    "（总结论文的创新点）"
+)
+
+_PAPER_RECOMMEND_LIMIT_PROMPT_INTRO = (
+    "你是一名严谨的学术论文摘要编辑。你的任务是把用户提供的【文章简介】压缩成更短的版本。\n"
+    "硬性规则：\n"
+    "只允许基于原文改写与删减，禁止新增论文未明确出现的数字、结论、因果解释、背景信息。\n"
+    "必须保留两件事：①研究问题（1句内）②主要贡献/做了什么（1句内）。\n"
+    "删除所有修饰、铺垫、泛化评价（如\"很有意义/非常重要\"）。\n"
+    "输出 2 句中文，整体不超过 180 字（按去空白字符计）。\n"
+    "只输出压缩后的正文，不要标题、不要字数说明、不要解释。"
+)
+
+_PAPER_RECOMMEND_LIMIT_PROMPT_METHOD = (
+    "你是一名学术方法部分的精炼编辑。你的任务是把用户提供的【重点思路】压缩到更短、更\"信息密度高\"的版本。\n"
+    "硬性规则：\n"
+    "只允许删减与同义改写，禁止新增论文未明确出现的实验设置、对比对象、指标、结论与数字。\n"
+    "只保留\"怎么做\"的关键动作：benchmark/数据/任务设计/训练或评测策略（优先保留带数字/专有名词的信息）。\n"
+    "输出格式固定为 最多 4 条，每条以\"🔸\"开头，每条 1 句。\n"
+    "整体不超过 280 字（去空白字符计）。\n"
+    "只输出压缩后的条目，不要额外说明。"
+)
+
+_PAPER_RECOMMEND_LIMIT_PROMPT_FINDINGS = (
+    "你是一名结果与结论部分的审稿式编辑。你的任务是把用户提供的【分析总结】压缩为更短的\"关键发现列表\"。\n"
+    "硬性规则：\n"
+    "只允许删减与同义改写，禁止新增论文未明确出现的解释、推断、因果链、建议或外延应用。\n"
+    "必须保留最核心的 2–4 个发现（优先保留：一致性变化、失败模式、能力对比、训练方式影响）。\n"
+    "输出格式固定为 最多 4 条，每条以\"🔸\"开头，每条 1 句，句子尽量短。\n"
+    "整体不超过 280 字（去空白字符计）。\n"
+    "只输出压缩后的条目，不要总结段、不要字数说明。"
+)
+
+_PAPER_RECOMMEND_LIMIT_PROMPT_OPINION = (
+    "你是一名克制、保真的学术评论编辑。你的任务是把用户提供的【个人观点】压缩为极短版本。\n"
+    "硬性规则：\n"
+    "只允许基于原文观点做删减与改写，禁止新增论文未提到的价值判断、应用场景、改进建议或任何推断性结论。\n"
+    "允许保留\"评价框架\"，但措辞必须克制（避免\"必然/革命性/全面提升\"等强断言）。\n"
+    "输出 1–2 句中文，整体不超过 160 字（去空白字符计）。\n"
+    "只输出压缩后的正文，不要标题、不要解释、不要字数说明。"
+)
+
 _FEATURE_DEFAULTS: dict[str, dict[str, Any]] = {
     "compare": {
         "llm_base_url": "",
@@ -164,8 +229,29 @@ _FEATURE_DEFAULTS: dict[str, dict[str, Any]] = {
         "input_safety_margin": 4096,
         "system_prompt": _INSPIRATION_SYSTEM_PROMPT_DEFAULT,
     },
+    "paper_recommend": {
+        # --- LLM 连接配置 ---
+        "llm_base_url": "",
+        "llm_api_key": "",
+        "llm_model": "",
+        "temperature": 1.0,
+        "max_tokens": 2048,
+        "input_hard_limit": 129024,
+        "input_safety_margin": 4096,
+        # --- 提示词配置 ---
+        "system_prompt": _PAPER_RECOMMEND_SYSTEM_PROMPT_DEFAULT,
+        "summary_limit_prompt_intro": _PAPER_RECOMMEND_LIMIT_PROMPT_INTRO,
+        "summary_limit_prompt_method": _PAPER_RECOMMEND_LIMIT_PROMPT_METHOD,
+        "summary_limit_prompt_findings": _PAPER_RECOMMEND_LIMIT_PROMPT_FINDINGS,
+        "summary_limit_prompt_opinion": _PAPER_RECOMMEND_LIMIT_PROMPT_OPINION,
+        # --- 字数上限 ---
+        "section_limit_intro": 170,
+        "section_limit_method": 270,
+        "section_limit_findings": 270,
+        "section_limit_opinion": 150,
+        "headline_limit": 18,
+    },
     # Future features can be added here:
-    # "paper_summary": { ... },
     # "theme_filter": { ... },
 }
 

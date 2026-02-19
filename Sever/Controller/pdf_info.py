@@ -7,7 +7,7 @@ import sys
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import requests
 
@@ -20,6 +20,93 @@ from config.config import org_max_tokens as CFG_MAX_TOKENS  # noqa: E402
 from config.config import pdf_info_system_prompt as CFG_INFO_PROMPT  # noqa: E402
 from config.config import DATA_ROOT, PAPER_THEME_FILTER_DIR  # noqa: E402
 from config.config import pdf_info_concurrency  # noqa: E402
+
+
+# ---------------------------------------------------------------------------
+# User-config helpers
+# ---------------------------------------------------------------------------
+
+def _load_user_config(user_id: int) -> Dict[str, Any]:
+    try:
+        from services.user_settings_service import get_settings
+        return get_settings(user_id, "paper_recommend")
+    except Exception:
+        return {}
+
+
+def _resolve_llm_preset(user_id: int, preset_id: Any) -> Dict[str, Any]:
+    try:
+        pid = int(preset_id)
+    except (TypeError, ValueError):
+        return {}
+    try:
+        from services.user_presets_service import get_llm_preset
+        return get_llm_preset(user_id, pid) or {}
+    except Exception:
+        return {}
+
+
+def _resolve_prompt_preset(user_id: int, preset_id: Any) -> str:
+    try:
+        pid = int(preset_id)
+    except (TypeError, ValueError):
+        return ""
+    try:
+        from services.user_presets_service import get_prompt_preset
+        p = get_prompt_preset(user_id, pid)
+        return (p or {}).get("prompt_content", "")
+    except Exception:
+        return ""
+
+
+def _resolve_llm_for_user(user_id: Optional[int]) -> Dict[str, Any]:
+    """Return effective LLM connection + prompt config for *user_id*.
+
+    Falls back to global config when *user_id* is None or has no preset.
+    """
+    cfg = {
+        "api_key": (CFG_QWEN_KEY or "").strip(),
+        "base_url": (CFG_BASE_URL or "https://dashscope.aliyuncs.com/compatible-mode/v1").strip(),
+        "model": (CFG_MODEL or "qwen-plus").strip(),
+        "temperature": CFG_TEMPERATURE if CFG_TEMPERATURE is not None else 1.0,
+        "max_tokens": CFG_MAX_TOKENS if CFG_MAX_TOKENS is not None else 1024,
+        "system_prompt": (CFG_INFO_PROMPT or "").strip(),
+    }
+    if user_id is None:
+        return cfg
+
+    ucfg = _load_user_config(user_id)
+    if not ucfg:
+        return cfg
+
+    # Module-specific preset first, then generic fallback
+    preset_id = ucfg.get("org_llm_preset_id") or ucfg.get("llm_preset_id")
+    preset = _resolve_llm_preset(user_id, preset_id) if preset_id else {}
+    if preset:
+        cfg["api_key"] = (preset.get("api_key") or cfg["api_key"]).strip()
+        cfg["base_url"] = (preset.get("base_url") or cfg["base_url"]).strip()
+        cfg["model"] = (preset.get("model") or cfg["model"]).strip()
+        if preset.get("temperature") is not None:
+            cfg["temperature"] = preset["temperature"]
+        if preset.get("max_tokens") is not None:
+            cfg["max_tokens"] = preset["max_tokens"]
+    else:
+        cfg["api_key"] = (ucfg.get("llm_api_key") or cfg["api_key"]).strip()
+        cfg["base_url"] = (ucfg.get("llm_base_url") or cfg["base_url"]).strip()
+        cfg["model"] = (ucfg.get("llm_model") or cfg["model"]).strip()
+        if ucfg.get("temperature") is not None:
+            cfg["temperature"] = ucfg["temperature"]
+        if ucfg.get("max_tokens") is not None:
+            cfg["max_tokens"] = ucfg["max_tokens"]
+
+    # Prompt override
+    prompt_preset_id = ucfg.get("org_prompt_preset_id")
+    if prompt_preset_id:
+        content = _resolve_prompt_preset(user_id, prompt_preset_id)
+        if content:
+            cfg["system_prompt"] = content
+
+    return cfg
 
 
 def ensure_dir(p: Path) -> Path:
@@ -159,12 +246,14 @@ def run(args: argparse.Namespace) -> None:
         print("[process] 0/0")
         return
     print("============开始调用大模型做机构识别==============", flush=True)
-    system_prompt = (CFG_INFO_PROMPT or "").strip()
-    api_key = (CFG_QWEN_KEY or "").strip()
-    base_url = (CFG_BASE_URL or "https://dashscope.aliyuncs.com/compatible-mode/v1").strip()
-    model = (CFG_MODEL or "qwen-plus").strip()
-    temperature = CFG_TEMPERATURE if CFG_TEMPERATURE is not None else 1.0
-    max_tokens = CFG_MAX_TOKENS if CFG_MAX_TOKENS is not None else 1024
+    user_id: Optional[int] = getattr(args, "user_id", None)
+    llm_cfg = _resolve_llm_for_user(user_id)
+    system_prompt = llm_cfg["system_prompt"]
+    api_key = llm_cfg["api_key"]
+    base_url = llm_cfg["base_url"]
+    model = llm_cfg["model"]
+    temperature = llm_cfg["temperature"]
+    max_tokens = llm_cfg["max_tokens"]
     agg: List[Dict[str, Any]] = []
     if out_path.exists():
         try:
@@ -258,6 +347,7 @@ def main() -> None:
     ap.add_argument("--limit", type=int, default=None)
     ap.add_argument("--concurrency", type=int, default=pdf_info_concurrency)
     ap.add_argument("--max-chars", type=int, default=120000)
+    ap.add_argument("--user-id", type=int, default=None, help="user id for per-user LLM/prompt preset override")
     args = ap.parse_args()
     run(args)
 

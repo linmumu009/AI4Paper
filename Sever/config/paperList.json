@@ -10728,5 +10728,1160 @@
     "title": "Bifrost: Steering Strategic Trajectories to Bridge Contextual Gaps for Self-Improving Agents",
     "source": "2602.05810",
     "writing_datetime": "2026-02-07T02:54:17.496987+00:00"
+  },
+  {
+    "title": "Illustration of Barren Plateaus in Quantum Computing",
+    "source": "2602.16558",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Learning Distributed Equilibria in Linear-Quadratic Stochastic Differential Games: An $α$-Potential Approach",
+    "source": "2602.16555",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "MerLean: An Agentic Framework for Autoformalization in Quantum Computation",
+    "source": "2602.16554",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "RIDER: 3D RNA Inverse Design with Reinforcement Learning-Guided Diffusion",
+    "source": "2602.16548",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Let's Split Up: Zero-Shot Classifier Edits for Fine-Grained Video Understanding",
+    "source": "2602.16545",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Vulnerability Analysis of Safe Reinforcement Learning via Inverse Constrained Reinforcement Learning",
+    "source": "2602.16543",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Optimal training-conditional regret for online conformal prediction",
+    "source": "2602.16537",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Transfer Learning of Linear Regression with Multiple Pretrained Models: Benefiting from More Pretrained Models via Overparameterization Debiasing",
+    "source": "2602.16531",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "FEKAN: Feature-Enriched Kolmogorov-Arnold Networks",
+    "source": "2602.16530",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Capacity-constrained demand response in smart grids using deep reinforcement learning",
+    "source": "2602.16525",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Reinforcement Learning for Parameterized Quantum State Preparation: A Comparative Study",
+    "source": "2602.16523",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Recursive language models for jailbreak detection: a procedural defense for tool-augmented agents",
+    "source": "2602.16520",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Supercharging Agenda Setting Research: The ParlaCAP Dataset of 28 European Parliaments and a Scalable Multilingual LLM-Based Classification",
+    "source": "2602.16516",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Framework of Thoughts: A Foundation Framework for Dynamic and Optimized Reasoning based on Chains, Trees, and Graphs",
+    "source": "2602.16512",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Small molecule retrieval from tandem mass spectrometry: what are we optimizing for?",
+    "source": "2602.16507",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Functional Decomposition and Shapley Interactions for Interpreting Survival Models",
+    "source": "2602.16505",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Interpretability-by-Design with Accurate Locally Additive Models and Conditional Feature Effects",
+    "source": "2602.16503",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Optimizing Soft Prompt Tuning via Structural Evolution",
+    "source": "2602.16500",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Fast and Scalable Analytical Diffusion",
+    "source": "2602.16498",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "From Growing to Looping: A Unified View of Iterative Computation in LLMs",
+    "source": "2602.16490",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Learning to Learn from Language Feedback with Social Meta-Learning",
+    "source": "2602.16488",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Team of Thoughts: Efficient Test-time Scaling of Agentic Systems through Orchestrated Tool Calling",
+    "source": "2602.16485",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Leveraging Large Language Models for Causal Discovery: a Constraint-based, Argumentation-driven Approach",
+    "source": "2602.16481",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Learning Preference from Observed Rankings",
+    "source": "2602.16476",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Synthesis and Verification of Transformer Programs",
+    "source": "2602.16473",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Training Models on Dialects of Translationese Shows How Lexical Diversity and Source-Target Syntactic Similarity Shape Learning",
+    "source": "2602.16469",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "HPMixer: Hierarchical Patching for Multivariate Time Series Forecasting",
+    "source": "2602.16468",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "IndicEval: A Bilingual Indian Educational Evaluation Framework for Large Language Models",
+    "source": "2602.16467",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Beyond SGD, Without SVD: Proximal Subspace Iteration LoRA with Diagonal Fractional K-FAC",
+    "source": "2602.16456",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "GICDM: Mitigating Hubness for Reliable Distance-Based Generative Model Evaluation",
+    "source": "2602.16449",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "RoboGene: Boosting VLA Pre-training via Diversity-Driven Agentic Framework for Real-World Task Generation",
+    "source": "2602.16444",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Hardware-accelerated graph neural networks: an alternative approach for neuromorphic event-based audio classification and keyword spotting on SoC FPGA",
+    "source": "2602.16442",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Intra-Fairness Dynamics: The Bias Spillover Effect in Targeted LLM Alignment",
+    "source": "2602.16438",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Learning with Locally Private Examples by Inverse Weierstrass Private Stochastic Gradient Descent",
+    "source": "2602.16436",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Causally-Guided Automated Feature Engineering with Multi-Agent Reinforcement Learning",
+    "source": "2602.16435",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Designing Production-Scale OCR for India: Multilingual and Domain-Specific Systems",
+    "source": "2602.16430",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "TabAgent: A Framework for Replacing Agentic Generative Components with Tabular-Textual Classifiers",
+    "source": "2602.16429",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Verifiable Semantics for Agent-to-Agent Communication",
+    "source": "2602.16424",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Automated Histopathology Report Generation via Pyramidal Feature Extraction and the UNI Foundation Model",
+    "source": "2602.16422",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Easy Data Unlearning Bench",
+    "source": "2602.16400",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Multi-Channel Replay Speech Detection using Acoustic Maps",
+    "source": "2602.16399",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Label-Consistent Data Generation for Aspect-Based Sentiment Analysis Using LLM Agents",
+    "source": "2602.16379",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Variable-Length Semantic IDs for Recommender Systems",
+    "source": "2602.16375",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "AI-Driven Structure Refinement of X-ray Diffraction",
+    "source": "2602.16372",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Improved Bounds for Reward-Agnostic and Reward-Free Exploration",
+    "source": "2602.16363",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Optical Inversion and Spectral Unmixing of Spectroscopic Photoacoustic Images with Physics-Informed Neural Networks",
+    "source": "2602.16357",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Articulated 3D Scene Graphs for Open-World Mobile Manipulation",
+    "source": "2602.16356",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Machine Learning in Epidemiology",
+    "source": "2602.16352",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Helpful to a Fault: Measuring Illicit Assistance in Multi-Turn, Multilingual LLM Agents",
+    "source": "2602.16346",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "How to Label Resynthesized Audio: The Dual Role of Neural Audio Codecs in Audio Deepfake Detection",
+    "source": "2602.16343",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Explainability for Fault Detection System in Chemical Processes",
+    "source": "2602.16341",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "The Implicit Bias of Adam and Muon on Smooth Homogeneous Neural Networks",
+    "source": "2602.16340",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Subtractive Modulative Network with Learnable Periodic Activations",
+    "source": "2602.16337",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "HAWX: A Hardware-Aware FrameWork for Fast and Scalable ApproXimation of DNNs",
+    "source": "2602.16336",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Spatial Audio Question Answering and Reasoning on Dynamic Source Movements",
+    "source": "2602.16334",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Guide-Guard: Off-Target Predicting in CRISPR Applications",
+    "source": "2602.16327",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "A Self-Supervised Approach for Enhanced Feature Representations in Object Detection Tasks",
+    "source": "2602.16322",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "RefineFormer3D: Efficient 3D Medical Image Segmentation via Adaptive Multi-Scale Transformer with Cross Attention Fusion",
+    "source": "2602.16320",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "A Graph Meta-Network for Learning on Kolmogorov-Arnold Networks",
+    "source": "2602.16316",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "The Diversity Paradox revisited: Systemic Effects of Feedback Loops in Recommender Systems",
+    "source": "2602.16315",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "MemoryArena: Benchmarking Agent Memory in Interdependent Multi-Session Agentic Tasks",
+    "source": "2602.16313",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "The Weight of a Bit: EMFI Sensitivity Analysis of Embedded Deep Learning Models",
+    "source": "2602.16309",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Generative AI Usage of University Students: Navigating Between Education and Business",
+    "source": "2602.16307",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "BAT: Better Audio Transformer Guided by Convex Gated Probing",
+    "source": "2602.16305",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Multi-agent cooperation through in-context co-player inference",
+    "source": "2602.16301",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "MultiCW: A Large-Scale Balanced Benchmark Dataset for Training Robust Check-Worthiness Detection Models",
+    "source": "2602.16298",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Aladdin-FTI @ AMIYA Three Wishes for Arabic NLP: Fidelity, Diglossia, and Multidialectal Generation",
+    "source": "2602.16290",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Fast KV Compaction via Attention Matching",
+    "source": "2602.16284",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Regret and Sample Complexity of Online Q-Learning via Concentration of Stochastic Approximation with Time-Inhomogeneous Markov Chains",
+    "source": "2602.16274",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Lyapunov Spectral Analysis of Speech Embedding Trajectories in Psychosis",
+    "source": "2602.16273",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Structured Unitary Tensor Network Representations for Circuit-Efficient Quantum Data Encoding",
+    "source": "2602.16266",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "On sparsity, extremal structure, and monotonicity properties of Wasserstein and Gromov-Wasserstein optimal transport plans",
+    "source": "2602.16265",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Prediction of Major Solar Flares Using Interpretable Class-dependent Reward Framework with Active Region Magnetograms and Domain Knowledge",
+    "source": "2602.16264",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Color-based Emotion Representation for Speech Emotion Recognition",
+    "source": "2602.16256",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Toward Scalable Verifiable Reward: Proxy State-Based Evaluation for Multi-turn Tool-Calling LLM Agents",
+    "source": "2602.16246",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Are LLMs Ready to Replace Bangla Annotators?",
+    "source": "2602.16241",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Online Prediction of Stochastic Sequences with High Probability Regret Bounds",
+    "source": "2602.16236",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "DistributedEstimator: Distributed Training of Quantum Neural Networks via Circuit Cutting",
+    "source": "2602.16233",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Factored Latent Action World Models",
+    "source": "2602.16229",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Amortized Predictability-aware Training Framework for Time Series Forecasting and Classification",
+    "source": "2602.16224",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "SEMixer: Semantics Enhanced MLP-Mixer for Multiscale Mixing and Long-term Time Series Forecasting",
+    "source": "2602.16220",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Bayesian Quadrature: Gaussian Processes for Integration",
+    "source": "2602.16218",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Multi-Class Boundary Extraction from Implicit Representations",
+    "source": "2602.16217",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "UCTECG-Net: Uncertainty-aware Convolution Transformer ECG Network for Arrhythmia Detection",
+    "source": "2602.16216",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Graph neural network for colliding particles with an application to sea ice floe modeling",
+    "source": "2602.16213",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Geometric Neural Operators via Lie Group-Constrained Latent Dynamics",
+    "source": "2602.16209",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Linked Data Classification using Neurochaos Learning",
+    "source": "2602.16204",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Long-Tail Knowledge in Large Language Models: Taxonomy, Mechanisms, Interventions and Implications",
+    "source": "2602.16201",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "The Validity of Coreference-based Evaluations of Natural Language Understanding",
+    "source": "2602.16200",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Training-Free Adaptation of Diffusion Models via Doob's $h$-Transform",
+    "source": "2602.16198",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "ModalImmune: Immunity Driven Unlearning via Self Destructive Training",
+    "source": "2602.16197",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Graphon Mean-Field Subsampling for Cooperative Heterogeneous Multi-Agent Reinforcement Learning",
+    "source": "2602.16196",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Temporal Panel Selection in Ongoing Citizens' Assemblies",
+    "source": "2602.16194",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Rethinking Input Domains in Physics-Informed Neural Networks via Geometric Compactification Mappings",
+    "source": "2602.16193",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Revolutionizing Long-Term Memory in AI: New Horizons with High-Capacity and High-Speed Storage",
+    "source": "2602.16192",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Beyond Learning: A Training-Free Alternative to Model Adaptation",
+    "source": "2602.16189",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Deep TPC: Temporal-Prior Conditioning for Time Series Forecasting",
+    "source": "2602.16188",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "SIT-LMPC: Safe Information-Theoretic Learning Model Predictive Control for Iterative Tasks",
+    "source": "2602.16187",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Multi-Agent Combinatorial-Multi-Armed-Bandit framework for the Submodular Welfare Problem under Bandit Feedback",
+    "source": "2602.16183",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Towards Secure and Scalable Energy Theft Detection: A Federated Learning Approach for Resource-Constrained Smart Meters",
+    "source": "2602.16181",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "EnterpriseGym Corecraft: Training Generalizable Agents on High-Fidelity RL Environments",
+    "source": "2602.16179",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Conjugate Learning Theory: Uncovering the Mechanisms of Trainability and Generalization in Deep Neural Networks",
+    "source": "2602.16177",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Edge Learning via Federated Split Decision Transformers for Metaverse Resource Allocation",
+    "source": "2602.16174",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Learning Personalized Agents from Human Feedback",
+    "source": "2602.16173",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Discrete Stochastic Localization for Non-autoregressive Generation",
+    "source": "2602.16169",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Muon with Spectral Guidance: Efficient Optimization for Scientific Machine Learning",
+    "source": "2602.16167",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "HiPER: Hierarchical Reinforcement Learning with Explicit Credit Assignment for Large Language Model Agents",
+    "source": "2602.16165",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "LLMs Exhibit Significantly Lower Uncertainty in Creative Writing Than Professional Writers",
+    "source": "2602.16162",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Emotion Collider: Dual Hyperbolic Mirror Manifolds for Sentiment Recovery via Anti Emotion Reflection",
+    "source": "2602.16161",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Differentially Private Non-convex Distributionally Robust Optimization",
+    "source": "2602.16155",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Balancing Faithfulness and Performance in Reasoning via Multi-Listener Soft Execution",
+    "source": "2602.16154",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Local adapt-then-combine algorithms for distributed nonsmooth optimization: Achieving provable communication acceleration",
+    "source": "2602.16148",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "ASPEN: Spectral-Temporal Fusion for Cross-Subject Brain Decoding",
+    "source": "2602.16147",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Investigating GNN Convergence on Large Randomly Generated Graphs with Realistic Node Feature Correlations",
+    "source": "2602.16145",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Missing-by-Design: Certifiable Modality Deletion for Revocable Multimodal Sentiment Analysis",
+    "source": "2602.16144",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Ratio Covers of Convex Sets and Optimal Mixture Density Estimation",
+    "source": "2602.16142",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Human-AI Collaboration in Large Language Model-Integrated Building Energy Management Systems: The Role of User Domain Knowledge and AI Literacy",
+    "source": "2602.16140",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Retrieval Collapses When AI Pollutes the Web",
+    "source": "2602.16136",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "CHAI: CacHe Attention Inference for text2video",
+    "source": "2602.16132",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Empirical Cumulative Distribution Function Clustering for LLM-based Agent System Analysis",
+    "source": "2602.16131",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "On the Power of Source Screening for Learning Shared Feature Extractors",
+    "source": "2602.16125",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Rethinking ANN-based Retrieval: Multifaceted Learnable Index for Large-scale Recommendation System",
+    "source": "2602.16124",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Feature-based morphological analysis of shape graph data",
+    "source": "2602.16120",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Evolutionary Context Search for Automated Skill Acquisition",
+    "source": "2602.16113",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Surrogate-Based Prevalence Measurement for Large-Scale A/B Testing",
+    "source": "2602.16111",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "OmniCT: Towards a Unified Slice-Volume LVLM for Comprehensive CT Analysis",
+    "source": "2602.16110",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Federated Graph AGI for Cross-Border Insider Threat Intelligence in Government Financial Schemes",
+    "source": "2602.16109",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "GPSBench: Do Large Language Models Understand GPS Coordinates?",
+    "source": "2602.16105",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Axle Sensor Fusion for Online Continual Wheel Fault Detection in Wayside Railway Monitoring",
+    "source": "2602.16101",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Quantifying and Attributing Submodel Uncertainty in Stochastic Simulation Models and Digital Twins",
+    "source": "2602.16099",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Collaborative Zone-Adaptive Zero-Day Intrusion Detection for IoBT",
+    "source": "2602.16098",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Updating Parametric Knowledge with Context Distillation Retains Post-Training Capabilities",
+    "source": "2602.16093",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Why Any-Order Autoregressive Models Need Two-Stream Attention: A Structural-Semantic Tradeoff",
+    "source": "2602.16092",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Examining Fast Radiative Feedbacks Using Machine-Learning Weather Emulators",
+    "source": "2602.16090",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "LGQ: Learning Discretization Geometry for Scalable and Stable Image Tokenization",
+    "source": "2602.16086",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Language Statistics and False Belief Reasoning: Evidence from 41 Open-Weight LMs",
+    "source": "2602.16085",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Surgical Activation Steering via Generative Causal Mediation",
+    "source": "2602.16080",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "ScenicRules: An Autonomous Driving Benchmark with Multi-Objective Specifications and Abstract Scenarios",
+    "source": "2602.16073",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Omni-iEEG: A Large-Scale, Comprehensive iEEG Dataset and Benchmark for Epilepsy Research",
+    "source": "2602.16072",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "The Limits of Long-Context Reasoning in Automated Bug Fixing",
+    "source": "2602.16069",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Improving Interactive In-Context Learning from Natural Language Feedback",
+    "source": "2602.16066",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Can Generative Artificial Intelligence Survive Data Contamination? Theoretical Guarantees under Contaminated Recursive Training",
+    "source": "2602.16065",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "MARLEM: A Multi-Agent Reinforcement Learning Simulation Framework for Implicit Cooperation in Decentralized Local Energy Markets",
+    "source": "2602.16063",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Harnessing Implicit Cooperation: A Multi-Agent Reinforcement Learning Approach Towards Decentralized Local Energy Markets",
+    "source": "2602.16062",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Partial Identification under Missing Data Using Weak Shadow Variables from Pretrained Models",
+    "source": "2602.16061",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Extracting and Analyzing Rail Crossing Behavior Signatures from Videos using Tensor Methods",
+    "source": "2602.16057",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "CLAA: Cross-Layer Attention Aggregation for Accelerating LLM Prefill",
+    "source": "2602.16054",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Multi-Objective Alignment of Language Models for Personalized Psychotherapy",
+    "source": "2602.16053",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "MoE-Spec: Expert Budgeting for Efficient Speculative Decoding",
+    "source": "2602.16052",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Evidence-Grounded Subspecialty Reasoning: Evaluating a Curated Clinical Intelligence Layer on the 2025 Endocrinology Board-Style Examination",
+    "source": "2602.16050",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "AI-CARE: Carbon-Aware Reporting Evaluation Metric for AI Models",
+    "source": "2602.16042",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "How Uncertain Is the Grade? A Benchmark of Uncertainty Metrics for LLM-Based Automatic Assessment",
+    "source": "2602.16039",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Heuristic Search as Language-Guided Program Optimization",
+    "source": "2602.16038",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Optimization Instability in Autonomous Agentic Workflows for Clinical Symptom Detection",
+    "source": "2602.16037",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Transforming GenAI Policy to Prompting Instruction: An RCT of Scalable Prompting Interventions in a CS1 Course",
+    "source": "2602.16033",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "A Curious Class of Adpositional Multiword Expressions in Korean",
+    "source": "2602.16023",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "MolCrystalFlow: Molecular Crystal Structure Prediction via Flow Matching",
+    "source": "2602.16020",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "MedProbCLIP: Probabilistic Adaptation of Vision-Language Foundation Model for Reliable Radiograph-Report Retrieval",
+    "source": "2602.16019",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Edge-Local and Qubit-Efficient Quantum Graph Learning for the NISQ Era",
+    "source": "2602.16018",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Geometry-Aware Uncertainty Quantification via Conformal Prediction on Manifolds",
+    "source": "2602.16015",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Towards Efficient Constraint Handling in Neural Solvers for Routing Problems",
+    "source": "2602.16012",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "MAEB: Massive Audio Embedding Benchmark",
+    "source": "2602.16008",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "ODYN: An All-Shifted Non-Interior-Point Method for Quadratic Programming in Robotics and AI",
+    "source": "2602.16005",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Imaging-Derived Coronary Fractional Flow Reserve: Advances in Physics-Based, Machine-Learning, and Physics-Informed Methods",
+    "source": "2602.16000",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Anatomy of Capability Emergence: Scale-Invariant Representation Collapse and Top-Down Reorganization in Neural Networks",
+    "source": "2602.15997",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Exploring New Frontiers in Vertical Federated Learning: the Role of Saddle Point Reformulation",
+    "source": "2602.15996",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Verifier-Constrained Flow Expansion for Discovery Beyond the Data",
+    "source": "2602.15984",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "ReLoop: Structured Modeling and Behavioral Verification for Reliable LLM-Based Optimization",
+    "source": "2602.15983",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Fast Online Learning with Gaussian Prior-Driven Hierarchical Unimodal Thompson Sampling",
+    "source": "2602.15972",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "B-DENSE: Branching For Dense Ensemble Network Learning",
+    "source": "2602.15971",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "From Reflection to Repair: A Scoping Review of Dataset Documentation Tools",
+    "source": "2602.15968",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "R$^2$Energy: A Large-Scale Benchmark for Robust Renewable Energy Forecasting under Diverse and Extreme Conditions",
+    "source": "2602.15961",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Position-Aware Scene-Appearance Disentanglement for Bidirectional Photoacoustic Microscopy Registration",
+    "source": "2602.15959",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "DocSplit: A Comprehensive Benchmark Dataset and Evaluation Approach for Document Packet Recognition and Splitting",
+    "source": "2602.15958",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Adaptive Semi-Supervised Training of P300 ERP-BCI Speller System with Minimum Calibration Effort",
+    "source": "2602.15955",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Hybrid Model Predictive Control with Physics-Informed Neural Network for Satellite Attitude Control",
+    "source": "2602.15954",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "MadEvolve: Evolutionary Optimization of Cosmological Algorithms with Large Language Models",
+    "source": "2602.15951",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Can Vision-Language Models See Squares? Text-Recognition Mediates Spatial Reasoning Across Three Model Families",
+    "source": "2602.15950",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "From Tool Orchestration to Code Execution: A Study of MCP Design Choices",
+    "source": "2602.15945",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Ensemble-size-dependence of deep-learning post-processing methods that minimize an (un)fair score: motivating examples and a proof-of-concept solution",
+    "source": "2602.15830",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Operationalising the Superficial Alignment Hypothesis via Task Complexity",
+    "source": "2602.15829",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Dex4D: Task-Agnostic Point Track Policy for Sim-to-Real Dexterous Manipulation",
+    "source": "2602.15828",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Perceptive Humanoid Parkour: Chaining Dynamic Human Skills via Motion Matching",
+    "source": "2602.15827",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "CrispEdit: Low-Curvature Projections for Scalable Non-Destructive LLM Editing",
+    "source": "2602.15823",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Stabilizing Test-Time Adaptation of High-Dimensional Simulation Surrogates via D-Optimal Statistics",
+    "source": "2602.15820",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Solving Parameter-Robust Avoid Problems with Unknown Feasibility using Reinforcement Learning",
+    "source": "2602.15817",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Developing AI Agents with Simulated Data: Why, what, and how?",
+    "source": "2602.15816",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Avey-B",
+    "source": "2602.15814",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Task-Agnostic Continual Learning for Chest Radiograph Classification",
+    "source": "2602.15811",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Decision Quality Evaluation Framework at Pinterest",
+    "source": "2602.15809",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "The Geometry of Alignment Collapse: When Fine-Tuning Breaks Safety",
+    "source": "2602.15799",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Visual Memory Injection Attacks for Multi-Turn Conversations",
+    "source": "2602.15927",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Enhancing Building Semantics Preservation in AI Model Training with Large Language Model Encodings",
+    "source": "2602.15791",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "This human study did not involve human subjects: Validating LLM simulations as behavioral evidence",
+    "source": "2602.15785",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Neural Scaling Laws for Boosted Jet Tagging",
+    "source": "2602.15781",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "A Study on Real-time Object Detection using Deep Learning",
+    "source": "2602.15926",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "*-PLUIE: Personalisable metric with Llm Used for Improved Evaluation",
+    "source": "2602.15778",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Robust Stochastic Gradient Posterior Sampling with Lattice Based Discretisation",
+    "source": "2602.15925",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "GlobeDiff: State Diffusion Process for Partial Observability in Multi-Agent Systems",
+    "source": "2602.15776",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Understanding vs. Generation: Navigating Optimization Dilemma in Multimodal Models",
+    "source": "2602.15772",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "ViTaB-A: Evaluating Multimodal Large Language Models on Visual Table Attribution",
+    "source": "2602.15769",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Robot-Assisted Social Dining as a White Glove Service",
+    "source": "2602.15767",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "GLM-5: from Vibe Coding to Agentic Engineering",
+    "source": "2602.15763",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "ChartEditBench: Evaluating Grounded Multi-Turn Chart Editing in Multimodal Language Models",
+    "source": "2602.15758",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Beyond Binary Classification: Detecting Fine-Grained Sexism in Social Media Videos",
+    "source": "2602.15757",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "A Note on Non-Composability of Layerwise Approximate Verification for Neural Inference",
+    "source": "2602.15756",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Under-resourced studies of under-resourced languages: lemmatization and POS-tagging with LLM annotators for historical Armenian, Georgian, Greek and Syriac",
+    "source": "2602.15753",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Beyond Match Maximization and Fairness: Retention-Optimized Two-Sided Matching",
+    "source": "2602.15752",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Enabling Low-Latency Machine learning on Radiation-Hard FPGAs with hls4ml",
+    "source": "2602.15751",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "UrbanVerse: Learning Urban Region Representation Across Cities and Tasks",
+    "source": "2602.15750",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "MRC-GAT: A Meta-Relational Copula-Based Graph Attention Network for Interpretable Multimodal Alzheimer's Disease Diagnosis",
+    "source": "2602.15740",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Beyond Labels: Information-Efficient Human-in-the-Loop Learning using Ranking and Selection Queries",
+    "source": "2602.15738",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "MeshMimic: Geometry-Aware Humanoid Motion Learning through 3D Scene Reconstruction",
+    "source": "2602.15733",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Causal Effect Estimation with Latent Textual Treatments",
+    "source": "2602.15730",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Spanning the Visual Analogy Space with a Weight Basis of LoRAs",
+    "source": "2602.15727",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Recursive Concept Evolution for Compositional Reasoning in Large Language Models",
+    "source": "2602.15725",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Learning to Retrieve Navigable Candidates for Efficient Vision-and-Language Navigation",
+    "source": "2602.15724",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Lifelong Scalable Multi-Agent Realistic Testbed and A Comprehensive Study on Design Choices in Lifelong AGV Fleet Management Systems",
+    "source": "2602.15721",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Rethinking Metrics for Lexical Semantic Change Detection",
+    "source": "2602.15716",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Criteria-first, semantics-later: reproducible structure discovery in image-based sciences",
+    "source": "2602.15712",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Random Wavelet Features for Graph Kernel Machines",
+    "source": "2602.15711",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Outer Diversity of Structured Domains",
+    "source": "2602.15708",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Proactive Conversational Assistant for a Procedural Manual Task based on Audio and IMU",
+    "source": "2602.15707",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Controlled oscillation modeling using port-Hamiltonian neural networks",
+    "source": "2602.15704",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "How to Disclose? Strategic AI Disclosure in Crowdfunding",
+    "source": "2602.15698",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "A fully differentiable framework for training proxy Exchange Correlation Functionals for periodic systems",
+    "source": "2602.15923",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "A Content-Based Framework for Cybersecurity Refusal Decisions in Large Language Models",
+    "source": "2602.15689",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Estimating Human Muscular Fatigue in Dynamic Collaborative Robotic Tasks with Learning-Based Models",
+    "source": "2602.15684",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Revisiting Northrop Frye's Four Myths Theory with Large Language Models",
+    "source": "2602.15678",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "CAMEL: An ECG Language Model for Forecasting Cardiac Events",
+    "source": "2602.15677",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
+  },
+  {
+    "title": "Relative Geometry of Neural Forecasters: Linking Accuracy and Alignment in Learned Latent Geometry",
+    "source": "2602.15676",
+    "writing_datetime": "2026-02-19T05:07:01.903407+00:00"
   }
 ]

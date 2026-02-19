@@ -120,10 +120,10 @@ watch(selectedDate, async (date) => {
   }
 })
 
-// 判断是否超限
+// 判断是否超限（用户已刷完所有允许的论文，且论文数等于配额上限）
 const isQuotaExceeded = computed(() => {
   if (quotaLimit.value === null) return false
-  return papers.value.length >= quotaLimit.value
+  return currentIndex.value >= papers.value.length && papers.value.length >= quotaLimit.value
 })
 
 // 获取超限提示信息
@@ -592,6 +592,18 @@ onBeforeRouteLeave(async (_to, _from, next) => {
           </button>
         </div>
 
+        <!-- 超限提示（不显示卡片，显示背景文字） -->
+        <div v-else-if="isQuotaExceeded && quotaExceededMessage" class="flex flex-col items-center justify-center gap-4 text-center px-8">
+          <div class="text-5xl mb-2">🔒</div>
+          <h2 class="text-xl font-bold text-text-primary">查看限制</h2>
+          <p class="text-base text-text-secondary max-w-md">
+            {{ quotaExceededMessage }}
+          </p>
+          <p class="text-sm text-text-muted mt-2">
+            升级账号可查看更多论文
+          </p>
+        </div>
+
         <!-- All swiped -->
         <div v-else-if="allSwiped" class="flex flex-col items-center gap-4 text-center px-8">
           <div class="text-5xl mb-2">🎉</div>
@@ -605,18 +617,6 @@ onBeforeRouteLeave(async (_to, _from, next) => {
           >
             重新浏览
           </button>
-        </div>
-
-        <!-- 超限提示（不显示卡片，显示背景文字） -->
-        <div v-else-if="isQuotaExceeded && quotaExceededMessage" class="flex flex-col items-center justify-center gap-4 text-center px-8">
-          <div class="text-5xl mb-2">🔒</div>
-          <h2 class="text-xl font-bold text-text-primary">查看限制</h2>
-          <p class="text-base text-text-secondary max-w-md">
-            {{ quotaExceededMessage }}
-          </p>
-          <p class="text-sm text-text-muted mt-2">
-            升级账号可查看更多论文
-          </p>
         </div>
 
         <!-- Card -->

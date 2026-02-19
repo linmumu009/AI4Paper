@@ -11,18 +11,36 @@ import {
   updateScheduleConfig,
   getSystemConfig,
   updateSystemConfig,
-  resetSystemConfig,
+  fetchLlmConfigs,
+  createLlmConfig,
+  updateLlmConfig,
+  deleteLlmConfig,
+  applyLlmConfig,
+  fetchPromptConfigs,
+  createPromptConfig,
+  updatePromptConfig,
+  deletePromptConfig,
+  applyPromptConfig,
 } from '../api'
-import type { AuthUser, UserTier, UserRole, PipelineRunStatus, ScheduleConfig, SystemConfigResponse, SystemConfigGroup, SystemConfigItem } from '../types/paper'
+import type {
+  AuthUser,
+  UserTier,
+  UserRole,
+  PipelineRunStatus,
+  ScheduleConfig,
+  SystemConfigGroup,
+  LlmConfig,
+  PromptConfig,
+} from '../types/paper'
 import { isSuperAdmin, currentUser } from '../stores/auth'
 
 // ---------------------------------------------------------------------------
 // Sidebar menu state
 // ---------------------------------------------------------------------------
-const activeTab = ref<'users' | 'roles' | 'pipeline' | 'schedule' | 'config'>('users')
+const activeTab = ref<'users' | 'roles' | 'pipeline' | 'schedule' | 'config' | 'llm-config' | 'prompt-config'>('users')
 
 const menuItems = computed(() => {
-  const items: { key: 'users' | 'roles' | 'pipeline' | 'schedule' | 'config'; icon: string; label: string; desc: string; group?: string }[] = [
+  const items: { key: 'users' | 'roles' | 'pipeline' | 'schedule' | 'config' | 'llm-config' | 'prompt-config'; icon: string; label: string; desc: string; group?: string }[] = [
     { key: 'users', icon: '👥', label: '用户等级', desc: '管理用户访问等级', group: '用户' },
   ]
   if (isSuperAdmin.value) {
@@ -32,6 +50,8 @@ const menuItems = computed(() => {
     { key: 'pipeline', icon: '🚀', label: '脚本执行', desc: '手动运行 Pipeline', group: '运维' },
     { key: 'schedule', icon: '🕐', label: '定时调度', desc: '自动定时执行配置', group: '运维' },
     { key: 'config', icon: '⚙️', label: '系统配置', desc: '管理系统配置项', group: '系统' },
+    { key: 'llm-config', icon: '🤖', label: '模型配置', desc: '管理大模型配置', group: '系统' },
+    { key: 'prompt-config', icon: '📝', label: '提示词配置', desc: '管理提示词配置', group: '系统' },
   )
   return items
 })
@@ -150,6 +170,12 @@ const runDate = ref(new Date().toISOString().slice(0, 10))
 const runPipelineName = ref('default')
 const runSllm = ref<number | null>(null)
 const runZo = ref('F')
+// Arxiv 检索参数
+const runDays = ref<number | null>(null)
+const runCategories = ref('')
+const runQuery = ref('')
+const runMaxPapers = ref<number | null>(null)
+const showAdvancedParams = ref(false)
 const isRunning = computed(() => pipelineStatus.value?.running === true)
 
 // Schedule
@@ -195,6 +221,10 @@ async function handleRunPipeline() {
       date: runDate.value,
       sllm: runSllm.value,
       zo: runZo.value,
+      days: runDays.value || null,
+      categories: runCategories.value.trim() || null,
+      extra_query: runQuery.value.trim() || null,
+      max_papers: runMaxPapers.value || null,
     })
     startPolling()
     await loadPipelineStatus()
@@ -292,55 +322,9 @@ const statusColor = computed(() => {
 // System Config Management
 // ---------------------------------------------------------------------------
 const configGroups = ref<SystemConfigGroup[]>([])
-const configDefaults = ref<Record<string, any>>({})
 const configLoading = ref(false)
-const configSaving = ref(false)
 const configError = ref('')
 const configValues = ref<Record<string, any>>({})
-const expandedGroups = ref<Set<string>>(new Set())
-
-// 大模型配置的子分组定义
-const llmSubGroups = {
-  '主题相关性评分模型': ['theme_select_base_url', 'theme_select_model', 'theme_select_max_tokens', 'theme_select_temperature', 'theme_select_concurrency'],
-  '机构判别模型': ['org_base_url', 'org_model', 'org_max_tokens', 'org_temperature', 'pdf_info_concurrency'],
-  '摘要生成模型 (Qwen)': ['summary_base_url', 'summary_model', 'summary_max_tokens', 'summary_temperature', 'summary_input_hard_limit', 'summary_input_safety_margin', 'summary_concurrency'],
-  '摘要生成模型2 (GPTGod Claude)': ['summary_base_url_2', 'summary_gptgod_apikey', 'summary_model_2'],
-  '摘要生成模型3 (VectorEngine Claude)': ['summary_base_url_3', 'summary_apikey_3', 'summary_model_3'],
-  '摘要精简模型 (Qwen)': ['summary_limit_base_url', 'summary_limit_model', 'summary_limit_max_tokens', 'summary_limit_temperature', 'summary_limit_concurrency', 'summary_limit_input_hard_limit', 'summary_limit_input_safety_margin'],
-  '摘要精简模型2 (GPTGod Claude)': ['summary_limit_url_2', 'summary_limit_gptgod_apikey', 'summary_limit_model_2'],
-  '摘要精简模型3 (VectorEngine Claude)': ['summary_limit_url_3', 'summary_limit_apikey_3', 'summary_limit_model_3'],
-  '批量摘要配置': ['summary_batch_base_url', 'summary_batch_api_key', 'summary_batch_model', 'summary_batch_temperature', 'summary_batch_completion_window', 'summary_batch_endpoint'],
-  'API Keys': ['minerU_Token', 'qwen_api_key', 'nvidia_api_key'],
-  '其他': ['SLLM'],
-}
-
-// 提示词配置的子分组定义
-const promptSubGroups = {
-  '主题相关性评分提示词': ['theme_select_system_prompt'],
-  '摘要生成提示词': ['system_prompt', 'summary_example'],
-  '摘要精简提示词': ['summary_limit_prompt_intro', 'summary_limit_prompt_method', 'summary_limit_prompt_findings', 'summary_limit_prompt_opinion', 'summary_limit_prompt_structure_check', 'summary_limit_prompt_structure_rewrite', 'summary_limit_prompt_headline'],
-  '批量摘要提示词': ['summary_batch_system_prompt'],
-  '机构判断提示词': ['pdf_info_system_prompt'],
-  '论文结构化抽取提示词': ['paper_assets_system_prompt'],
-}
-
-function toggleGroup(groupName: string) {
-  if (expandedGroups.value.has(groupName)) {
-    expandedGroups.value.delete(groupName)
-  } else {
-    expandedGroups.value.add(groupName)
-  }
-}
-
-function isGroupExpanded(groupName: string): boolean {
-  return expandedGroups.value.has(groupName)
-}
-
-function getSubGroupItems(groupName: string, subGroupName: string, items: SystemConfigItem[]): SystemConfigItem[] {
-  const keys = groupName === '大模型调用配置' ? llmSubGroups[subGroupName as keyof typeof llmSubGroups] : promptSubGroups[subGroupName as keyof typeof promptSubGroups]
-  if (!keys) return []
-  return items.filter(item => keys.includes(item.key))
-}
 
 async function loadSystemConfig() {
   configLoading.value = true
@@ -348,7 +332,6 @@ async function loadSystemConfig() {
   try {
     const res = await getSystemConfig()
     configGroups.value = res.groups
-    configDefaults.value = res.defaults
     // 初始化配置值
     const values: Record<string, any> = {}
     for (const group of res.groups) {
@@ -357,8 +340,6 @@ async function loadSystemConfig() {
       }
     }
     configValues.value = values
-    // 默认展开所有分组
-    expandedGroups.value = new Set(res.groups.map(g => g.name))
   } catch (e: any) {
     configError.value = e?.response?.data?.detail || '加载配置失败'
   } finally {
@@ -366,84 +347,480 @@ async function loadSystemConfig() {
   }
 }
 
-async function handleSaveConfig() {
-  configSaving.value = true
-  configError.value = ''
-  try {
-    await updateSystemConfig(configValues.value)
-    await loadSystemConfig()
-    window.alert('配置已保存')
-  } catch (e: any) {
-    configError.value = e?.response?.data?.detail || '保存配置失败'
-    window.alert(configError.value)
-  } finally {
-    configSaving.value = false
+// ---------------------------------------------------------------------------
+// System Config: Preset-based UI state & helpers
+// ---------------------------------------------------------------------------
+
+// Module-based config structure: each module groups its LLM + prompts together
+const configModules = [
+  {
+    key: 'theme_select',
+    label: '主题相关性评分',
+    icon: '🎯',
+    desc: '对论文进行主题相关性评分，筛选相关论文',
+    llmPrefix: 'theme_select' as string | null,
+    prompts: [
+      { variable: 'theme_select_system_prompt', label: '评分提示词' },
+    ],
+  },
+  {
+    key: 'org',
+    label: '机构判别',
+    icon: '🏛️',
+    desc: '提取论文作者机构信息',
+    llmPrefix: 'org' as string | null,
+    prompts: [
+      { variable: 'pdf_info_system_prompt', label: '机构判别提示词' },
+    ],
+  },
+  {
+    key: 'summary',
+    label: '摘要生成',
+    icon: '📄',
+    desc: '生成论文中文摘要笔记',
+    llmPrefix: 'summary' as string | null,
+    prompts: [
+      { variable: 'system_prompt', label: '摘要生成提示词' },
+    ],
+  },
+  {
+    key: 'summary_limit',
+    label: '摘要精简',
+    icon: '✂️',
+    desc: '压缩摘要各部分至字数上限（按需触发）',
+    llmPrefix: 'summary_limit' as string | null,
+    prompts: [
+      { variable: 'summary_limit_prompt_intro', label: '文章简介精简提示词' },
+      { variable: 'summary_limit_prompt_method', label: '重点思路精简提示词' },
+      { variable: 'summary_limit_prompt_findings', label: '分析总结精简提示词' },
+      { variable: 'summary_limit_prompt_opinion', label: '个人观点精简提示词' },
+      { variable: 'summary_limit_prompt_structure_check', label: '结构校验提示词' },
+      { variable: 'summary_limit_prompt_structure_rewrite', label: '结构重排提示词' },
+      { variable: 'summary_limit_prompt_headline', label: '首行压缩提示词' },
+    ],
+  },
+  {
+    key: 'summary_batch',
+    label: '批量摘要',
+    icon: '📦',
+    desc: '批量处理论文摘要生成任务',
+    llmPrefix: 'summary_batch' as string | null,
+    prompts: [
+      { variable: 'summary_batch_system_prompt', label: '批量摘要提示词' },
+    ],
+  },
+  {
+    key: 'paper_assets',
+    label: '论文结构化抽取',
+    icon: '🔬',
+    desc: '提取论文结构化数据',
+    llmPrefix: null,
+    prompts: [
+      { variable: 'paper_assets_system_prompt', label: '结构化抽取提示词' },
+    ],
+  },
+]
+
+// Per-prefix selected LLM config IDs
+const selectedLlmConfigIds = ref<Record<string, number | null>>({
+  theme_select: null,
+  org: null,
+  summary: null,
+  summary_limit: null,
+  summary_batch: null,
+})
+
+// Per-variable selected prompt config IDs
+const selectedPromptConfigIds = ref<Record<string, number | null>>({
+  theme_select_system_prompt: null,
+  system_prompt: null,
+  summary_limit_prompt_intro: null,
+  summary_limit_prompt_method: null,
+  summary_limit_prompt_findings: null,
+  summary_limit_prompt_opinion: null,
+  summary_limit_prompt_structure_check: null,
+  summary_limit_prompt_structure_rewrite: null,
+  summary_limit_prompt_headline: null,
+  summary_batch_system_prompt: null,
+  pdf_info_system_prompt: null,
+  paper_assets_system_prompt: null,
+})
+
+// Word limit values (editable)
+const wordLimitValues = ref<Record<string, number>>({
+  summary_limit_section_limit_intro: 170,
+  summary_limit_section_limit_method: 270,
+  summary_limit_section_limit_findings: 270,
+  summary_limit_section_limit_opinion: 150,
+  summary_limit_headline_limit: 18,
+})
+
+const wordLimitDefaults: Record<string, number> = {
+  summary_limit_section_limit_intro: 170,
+  summary_limit_section_limit_method: 270,
+  summary_limit_section_limit_findings: 270,
+  summary_limit_section_limit_opinion: 150,
+  summary_limit_headline_limit: 18,
+}
+
+const wordLimitLabels: Record<string, string> = {
+  summary_limit_section_limit_intro: '文章简介',
+  summary_limit_section_limit_method: '重点思路',
+  summary_limit_section_limit_findings: '分析总结',
+  summary_limit_section_limit_opinion: '个人观点',
+  summary_limit_headline_limit: '首行字数',
+}
+
+// Mapping: prefix → config.py model/base_url key names
+const prefixModelKey: Record<string, string> = {
+  theme_select: 'theme_select_model',
+  org: 'org_model',
+  summary: 'summary_model',
+  summary_limit: 'summary_limit_model',
+  summary_batch: 'summary_batch_model',
+}
+const prefixBaseUrlKey: Record<string, string> = {
+  theme_select: 'theme_select_base_url',
+  org: 'org_base_url',
+  summary: 'summary_base_url',
+  summary_limit: 'summary_limit_base_url',
+  summary_batch: 'summary_batch_base_url',
+}
+
+const applyingModelPrefix = ref<string | null>(null)
+const applyingPromptVariable = ref<string | null>(null)
+const savingWordLimits = ref(false)
+const sysConfigSuccessMsg = ref('')
+
+function detectLlmSelections() {
+  for (const mod of configModules) {
+    if (!mod.llmPrefix) continue
+    const currentModel = configValues.value[prefixModelKey[mod.llmPrefix]]
+    const currentUrl = configValues.value[prefixBaseUrlKey[mod.llmPrefix]]
+    if (!currentModel && !currentUrl) {
+      selectedLlmConfigIds.value[mod.llmPrefix] = null
+      continue
+    }
+    const match = llmConfigs.value.find(c => c.model === currentModel && c.base_url === currentUrl)
+    selectedLlmConfigIds.value[mod.llmPrefix] = match?.id ?? null
   }
 }
 
-async function handleResetConfig() {
-  if (!confirm('确定要重置所有配置为默认值吗？此操作不可撤销。')) return
-  try {
-    await resetSystemConfig()
-    await loadSystemConfig()
-    window.alert('配置已重置为默认值')
-  } catch (e: any) {
-    configError.value = e?.response?.data?.detail || '重置配置失败'
-    window.alert(configError.value)
-  }
-}
-
-function maskSensitiveValue(value: any, isSensitive: boolean): string {
-  if (!isSensitive) return String(value)
-  const str = String(value)
-  if (str.length <= 8) return '****'
-  return str.substring(0, 4) + '****' + str.substring(str.length - 4)
-}
-
-function getInputType(item: SystemConfigItem): string {
-  if (item.type === 'bool' || item.type === 'bool') return 'checkbox'
-  if (item.type === 'int' || item.type === 'float') return 'number'
-  if (item.type === 'list') return 'textarea'
-  return 'text'
-}
-
-function formatValueForInput(item: SystemConfigItem, value: any): string {
-  if (item.type === 'list' && Array.isArray(value)) {
-    return JSON.stringify(value, null, 2)
-  }
-  if (item.type === 'bool') {
-    return value ? 'true' : 'false'
-  }
-  return String(value ?? '')
-}
-
-function parseValueFromInput(item: SystemConfigItem, inputValue: string): any {
-  if (item.type === 'list') {
-    try {
-      return JSON.parse(inputValue)
-    } catch {
-      // 尝试逗号分隔
-      return inputValue.split(',').map(s => s.trim()).filter(s => s)
+function detectPromptSelections() {
+  for (const mod of configModules) {
+    for (const prompt of mod.prompts) {
+      const currentPrompt = configValues.value[prompt.variable]
+      if (!currentPrompt) {
+        selectedPromptConfigIds.value[prompt.variable] = null
+        continue
+      }
+      const match = promptConfigs.value.find(c => c.prompt_content === currentPrompt)
+      selectedPromptConfigIds.value[prompt.variable] = match?.id ?? null
     }
   }
-  if (item.type === 'bool') {
-    return inputValue === 'true' || inputValue === '1' || inputValue === 'on'
+}
+
+function initWordLimits() {
+  for (const key of Object.keys(wordLimitDefaults)) {
+    if (key in configValues.value && configValues.value[key] !== undefined) {
+      wordLimitValues.value[key] = Number(configValues.value[key]) || wordLimitDefaults[key]
+    }
   }
-  if (item.type === 'int') {
-    return parseInt(inputValue, 10)
+}
+
+// MinerU Token
+const mineruTokenValue = ref('')
+const mineruTokenVisible = ref(false)
+const savingMineruToken = ref(false)
+
+function initMineruToken() {
+  mineruTokenValue.value = String(configValues.value['minerU_Token'] || '')
+}
+
+async function handleSaveMineruToken() {
+  savingMineruToken.value = true
+  try {
+    await updateSystemConfig({ minerU_Token: mineruTokenValue.value })
+    await loadSystemConfig()
+    initMineruToken()
+    sysConfigSuccessMsg.value = 'MinerU Token 已保存'
+    setTimeout(() => { sysConfigSuccessMsg.value = '' }, 2500)
+  } catch (e: any) {
+    window.alert(e?.response?.data?.detail || '保存失败')
+  } finally {
+    savingMineruToken.value = false
   }
-  if (item.type === 'float') {
-    return parseFloat(inputValue)
+}
+
+async function handleApplyLlmConfig(prefix: string) {
+  const configId = selectedLlmConfigIds.value[prefix]
+  if (!configId) return
+  applyingModelPrefix.value = prefix
+  try {
+    await applyLlmConfig(configId, prefix)
+    await loadSystemConfig()
+    detectLlmSelections()
+    sysConfigSuccessMsg.value = '模型配置已应用'
+    setTimeout(() => { sysConfigSuccessMsg.value = '' }, 2500)
+  } catch (e: any) {
+    window.alert(e?.response?.data?.detail || '应用失败')
+  } finally {
+    applyingModelPrefix.value = null
   }
-  return inputValue
+}
+
+async function handleApplyPromptConfig(variable: string) {
+  const configId = selectedPromptConfigIds.value[variable]
+  if (!configId) return
+  applyingPromptVariable.value = variable
+  try {
+    await applyPromptConfig(configId, variable)
+    await loadSystemConfig()
+    detectPromptSelections()
+    sysConfigSuccessMsg.value = '提示词配置已应用'
+    setTimeout(() => { sysConfigSuccessMsg.value = '' }, 2500)
+  } catch (e: any) {
+    window.alert(e?.response?.data?.detail || '应用失败')
+  } finally {
+    applyingPromptVariable.value = null
+  }
+}
+
+async function handleSaveWordLimits() {
+  savingWordLimits.value = true
+  try {
+    await updateSystemConfig({ ...wordLimitValues.value })
+    await loadSystemConfig()
+    initWordLimits()
+    sysConfigSuccessMsg.value = '字数上限已保存'
+    setTimeout(() => { sysConfigSuccessMsg.value = '' }, 2500)
+  } catch (e: any) {
+    window.alert(e?.response?.data?.detail || '保存失败')
+  } finally {
+    savingWordLimits.value = false
+  }
 }
 
 // Watch activeTab to load config when switching to config tab
-watch(activeTab, (newTab) => {
-  if (newTab === 'config' && configGroups.value.length === 0) {
-    loadSystemConfig()
+watch(activeTab, async (newTab) => {
+  if (newTab === 'config') {
+    const promises: Promise<void>[] = []
+    if (configGroups.value.length === 0) promises.push(loadSystemConfig())
+    if (llmConfigs.value.length === 0) promises.push(loadLlmConfigs())
+    if (promptConfigs.value.length === 0) promises.push(loadPromptConfigs())
+    if (promises.length > 0) await Promise.all(promises)
+    detectLlmSelections()
+    detectPromptSelections()
+    initWordLimits()
+    initMineruToken()
+  } else if (newTab === 'llm-config' && llmConfigs.value.length === 0) {
+    loadLlmConfigs()
+  } else if (newTab === 'prompt-config' && promptConfigs.value.length === 0) {
+    loadPromptConfigs()
   }
 })
+
+// ---------------------------------------------------------------------------
+// LLM Config Management
+// ---------------------------------------------------------------------------
+const llmConfigs = ref<LlmConfig[]>([])
+const llmConfigLoading = ref(false)
+const llmConfigError = ref('')
+const llmConfigEditing = ref<LlmConfig | null>(null)
+const llmConfigForm = ref<Partial<LlmConfig>>({})
+const llmConfigSaving = ref(false)
+const llmConfigApplying = ref<number | null>(null)
+
+const usagePrefixOptions = [
+  { value: 'theme_select', label: '主题评分 (theme_select)' },
+  { value: 'org', label: '机构判别 (org)' },
+  { value: 'summary', label: '摘要生成 (summary)' },
+  { value: 'summary_limit', label: '摘要精简 (summary_limit)' },
+  { value: 'summary_batch', label: '批量摘要 (summary_batch)' },
+]
+
+async function loadLlmConfigs() {
+  llmConfigLoading.value = true
+  llmConfigError.value = ''
+  try {
+    const res = await fetchLlmConfigs()
+    llmConfigs.value = res.configs
+  } catch (e: any) {
+    llmConfigError.value = e?.response?.data?.detail || '加载模型配置列表失败'
+  } finally {
+    llmConfigLoading.value = false
+  }
+}
+
+function startEditLlmConfig(config?: LlmConfig) {
+  if (config) {
+    llmConfigEditing.value = config
+    llmConfigForm.value = { ...config }
+  } else {
+    llmConfigEditing.value = null
+    llmConfigForm.value = {
+      name: '',
+      remark: '',
+      base_url: '',
+      api_key: '',
+      model: '',
+      max_tokens: undefined,
+      temperature: undefined,
+      concurrency: undefined,
+      input_hard_limit: undefined,
+      input_safety_margin: undefined,
+      endpoint: undefined,
+      completion_window: undefined,
+      out_root: undefined,
+      jsonl_root: undefined,
+    }
+  }
+}
+
+async function saveLlmConfig() {
+  if (!llmConfigForm.value.name || !llmConfigForm.value.base_url || !llmConfigForm.value.api_key || !llmConfigForm.value.model) {
+    window.alert('请填写必填字段：名称、base_url、api_key、model')
+    return
+  }
+  llmConfigSaving.value = true
+  llmConfigError.value = ''
+  try {
+    if (llmConfigEditing.value?.id) {
+      await updateLlmConfig(llmConfigEditing.value.id, llmConfigForm.value)
+    } else {
+      await createLlmConfig(llmConfigForm.value as Omit<LlmConfig, 'id' | 'created_at' | 'updated_at'>)
+    }
+    await loadLlmConfigs()
+    llmConfigEditing.value = null
+    llmConfigForm.value = {}
+  } catch (e: any) {
+    llmConfigError.value = e?.response?.data?.detail || '保存配置失败'
+    window.alert(llmConfigError.value)
+  } finally {
+    llmConfigSaving.value = false
+  }
+}
+
+async function deleteLlmConfigHandler(id: number) {
+  if (!window.confirm('确定要删除此配置吗？')) return
+  try {
+    await deleteLlmConfig(id)
+    await loadLlmConfigs()
+  } catch (e: any) {
+    window.alert(e?.response?.data?.detail || '删除配置失败')
+  }
+}
+
+async function applyLlmConfigHandler(id: number, usagePrefix: string) {
+  llmConfigApplying.value = id
+  try {
+    await applyLlmConfig(id, usagePrefix)
+    window.alert(`配置已成功应用到 ${usagePrefix} 前缀`)
+  } catch (e: any) {
+    window.alert(e?.response?.data?.detail || '应用配置失败')
+  } finally {
+    llmConfigApplying.value = null
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Prompt Config Management
+// ---------------------------------------------------------------------------
+const promptConfigs = ref<PromptConfig[]>([])
+const promptConfigLoading = ref(false)
+const promptConfigError = ref('')
+const promptConfigEditing = ref<PromptConfig | null>(null)
+const promptConfigForm = ref<Partial<PromptConfig>>({})
+const promptConfigSaving = ref(false)
+const promptConfigApplying = ref<number | null>(null)
+
+const promptVariableOptions = [
+  { value: 'theme_select_system_prompt', label: '主题评分提示词 (theme_select_system_prompt)' },
+  { value: 'system_prompt', label: '摘要生成提示词 (system_prompt)' },
+  { value: 'summary_limit_prompt_intro', label: '摘要精简-文章简介 (summary_limit_prompt_intro)' },
+  { value: 'summary_limit_prompt_method', label: '摘要精简-重点思路 (summary_limit_prompt_method)' },
+  { value: 'summary_limit_prompt_findings', label: '摘要精简-分析总结 (summary_limit_prompt_findings)' },
+  { value: 'summary_limit_prompt_opinion', label: '摘要精简-个人观点 (summary_limit_prompt_opinion)' },
+  { value: 'summary_limit_prompt_structure_check', label: '摘要结构校验 (summary_limit_prompt_structure_check)' },
+  { value: 'summary_limit_prompt_structure_rewrite', label: '摘要结构重排 (summary_limit_prompt_structure_rewrite)' },
+  { value: 'summary_limit_prompt_headline', label: '摘要首行压缩 (summary_limit_prompt_headline)' },
+  { value: 'summary_batch_system_prompt', label: '批量摘要提示词 (summary_batch_system_prompt)' },
+  { value: 'pdf_info_system_prompt', label: '机构判别提示词 (pdf_info_system_prompt)' },
+  { value: 'paper_assets_system_prompt', label: '论文结构化抽取 (paper_assets_system_prompt)' },
+]
+
+async function loadPromptConfigs() {
+  promptConfigLoading.value = true
+  promptConfigError.value = ''
+  try {
+    const res = await fetchPromptConfigs()
+    promptConfigs.value = res.configs
+  } catch (e: any) {
+    promptConfigError.value = e?.response?.data?.detail || '加载提示词配置列表失败'
+  } finally {
+    promptConfigLoading.value = false
+  }
+}
+
+function startEditPromptConfig(config?: PromptConfig) {
+  if (config) {
+    promptConfigEditing.value = config
+    promptConfigForm.value = { ...config }
+  } else {
+    promptConfigEditing.value = null
+    promptConfigForm.value = {
+      name: '',
+      remark: '',
+      prompt_content: '',
+    }
+  }
+}
+
+async function savePromptConfig() {
+  if (!promptConfigForm.value.name || !promptConfigForm.value.prompt_content) {
+    window.alert('请填写必填字段：名称、prompt_content')
+    return
+  }
+  promptConfigSaving.value = true
+  promptConfigError.value = ''
+  try {
+    if (promptConfigEditing.value?.id) {
+      await updatePromptConfig(promptConfigEditing.value.id, promptConfigForm.value)
+    } else {
+      await createPromptConfig(promptConfigForm.value as Omit<PromptConfig, 'id' | 'created_at' | 'updated_at'>)
+    }
+    await loadPromptConfigs()
+    promptConfigEditing.value = null
+    promptConfigForm.value = {}
+  } catch (e: any) {
+    promptConfigError.value = e?.response?.data?.detail || '保存配置失败'
+    window.alert(promptConfigError.value)
+  } finally {
+    promptConfigSaving.value = false
+  }
+}
+
+async function deletePromptConfigHandler(id: number) {
+  if (!window.confirm('确定要删除此配置吗？')) return
+  try {
+    await deletePromptConfig(id)
+    await loadPromptConfigs()
+  } catch (e: any) {
+    window.alert(e?.response?.data?.detail || '删除配置失败')
+  }
+}
+
+async function applyPromptConfigHandler(id: number, variableName: string) {
+  promptConfigApplying.value = id
+  try {
+    await applyPromptConfig(id, variableName)
+    window.alert(`配置已成功应用到变量 ${variableName}`)
+  } catch (e: any) {
+    window.alert(e?.response?.data?.detail || '应用配置失败')
+  } finally {
+    promptConfigApplying.value = null
+  }
+}
 
 onMounted(async () => {
   loadUsers()
@@ -735,7 +1112,8 @@ onUnmounted(() => {
         <div class="rounded-xl bg-bg-card border border-border p-5">
           <h2 class="text-sm font-semibold text-text-primary mb-3">执行参数</h2>
 
-          <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+          <!-- 基础参数 -->
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
             <div>
               <label class="block text-xs text-text-muted mb-1">运行日期</label>
               <input
@@ -775,6 +1153,77 @@ onUnmounted(() => {
                 <option value="F">关闭</option>
                 <option value="T">开启</option>
               </select>
+            </div>
+          </div>
+
+          <!-- Arxiv 检索参数折叠区 -->
+          <div class="mb-4">
+            <button
+              type="button"
+              class="flex items-center gap-1.5 text-xs text-text-muted hover:text-text-secondary transition-colors mb-2"
+              @click="showAdvancedParams = !showAdvancedParams"
+            >
+              <span class="transition-transform duration-200" :class="showAdvancedParams ? 'rotate-90' : ''">▶</span>
+              <span>Arxiv 检索参数</span>
+              <span
+                v-if="runDays || runCategories || runQuery || runMaxPapers"
+                class="ml-1 px-1.5 py-0.5 rounded text-[10px] bg-blue-500/20 text-blue-400"
+              >已自定义</span>
+            </button>
+
+            <div v-if="showAdvancedParams" class="grid grid-cols-2 md:grid-cols-4 gap-3 pl-0">
+              <div>
+                <label class="block text-xs text-text-muted mb-1">
+                  时间窗口 (天)
+                  <span class="ml-1 text-[10px] text-text-muted/60">--days，默认 1</span>
+                </label>
+                <input
+                  v-model.number="runDays"
+                  type="number"
+                  min="1"
+                  max="30"
+                  placeholder="1"
+                  class="w-full px-3 py-2 rounded-lg bg-bg-elevated border border-border text-text-primary text-sm focus:outline-none focus:ring-1 focus:ring-blue-500/50 placeholder:text-text-muted/40"
+                />
+              </div>
+              <div>
+                <label class="block text-xs text-text-muted mb-1">
+                  最大论文数
+                  <span class="ml-1 text-[10px] text-text-muted/60">--max-papers，默认 500</span>
+                </label>
+                <input
+                  v-model.number="runMaxPapers"
+                  type="number"
+                  min="1"
+                  max="5000"
+                  placeholder="500"
+                  class="w-full px-3 py-2 rounded-lg bg-bg-elevated border border-border text-text-primary text-sm focus:outline-none focus:ring-1 focus:ring-blue-500/50 placeholder:text-text-muted/40"
+                />
+              </div>
+              <div class="md:col-span-2">
+                <label class="block text-xs text-text-muted mb-1">
+                  检索分类
+                  <span class="ml-1 text-[10px] text-text-muted/60">--categories，逗号分隔，如 cs.AI,cs.LG</span>
+                </label>
+                <input
+                  v-model="runCategories"
+                  type="text"
+                  placeholder="cs.CL,cs.LG,cs.AI,stat.ML"
+                  class="w-full px-3 py-2 rounded-lg bg-bg-elevated border border-border text-text-primary text-sm focus:outline-none focus:ring-1 focus:ring-blue-500/50 placeholder:text-text-muted/40"
+                />
+              </div>
+              <div class="md:col-span-4">
+                <label class="block text-xs text-text-muted mb-1">
+                  附加关键词
+                  <span class="ml-1 text-[10px] text-text-muted/60">--query，支持自然语言或 arXiv 高级表达式（ti:/abs:/AND/OR...）</span>
+                </label>
+                <input
+                  v-model="runQuery"
+                  type="text"
+                  placeholder='例：reinforcement learning 或 ti:"large language model" AND abs:reasoning'
+                  class="w-full px-3 py-2 rounded-lg bg-bg-elevated border border-border text-text-primary text-sm focus:outline-none focus:ring-1 focus:ring-blue-500/50 placeholder:text-text-muted/40"
+                />
+              </div>
             </div>
           </div>
 
@@ -967,220 +1416,501 @@ onUnmounted(() => {
       </div>
 
       <!-- ============================================================= -->
-      <!-- Page: System Config -->
+      <!-- Page: System Config (Redesigned with Preset Selectors) -->
       <!-- ============================================================= -->
-      <div v-if="activeTab === 'config'" class="flex-1 flex flex-col p-6 gap-4 overflow-auto">
-        <div class="shrink-0 flex items-center justify-between">
+      <div v-if="activeTab === 'config'" class="flex-1 overflow-auto p-6">
+        <div class="max-w-3xl mx-auto space-y-5">
+        <!-- Header -->
+        <div class="flex items-center justify-between shrink-0">
           <div>
             <h1 class="text-lg font-bold text-text-primary">⚙️ 系统配置</h1>
-            <p class="text-xs text-text-muted mt-0.5">管理系统配置项，修改将保存到配置文件</p>
+            <p class="text-xs text-text-muted mt-0.5">选择已存储的模型/提示词配置并应用到各功能角色，直接编辑并保存字数上限</p>
           </div>
-          <div class="flex items-center gap-2">
+          <div class="flex items-center gap-3">
+            <span v-if="sysConfigSuccessMsg" class="text-xs text-green-400 flex items-center gap-1.5">
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5" /></svg>
+              {{ sysConfigSuccessMsg }}
+            </span>
             <button
               class="px-3 py-1.5 rounded-full border border-border text-xs text-text-secondary bg-transparent cursor-pointer hover:bg-bg-hover transition-colors"
-              @click="loadSystemConfig"
+              @click="async () => { await Promise.all([loadSystemConfig(), loadLlmConfigs(), loadPromptConfigs()]); detectLlmSelections(); detectPromptSelections(); initWordLimits(); initMineruToken() }"
             >
               🔄 刷新
-            </button>
-            <button
-              :disabled="configSaving"
-              class="px-5 py-2 rounded-lg bg-green-600 hover:bg-green-500 text-white text-sm font-medium shadow-lg shadow-green-600/20 transition-all duration-200 disabled:opacity-50"
-              @click="handleSaveConfig"
-            >
-              {{ configSaving ? '保存中...' : '💾 保存配置' }}
-            </button>
-            <button
-              class="px-5 py-2 rounded-lg bg-red-600/20 text-red-400 border border-red-500/30 text-sm font-medium hover:bg-red-600/30 transition-all duration-200"
-              @click="handleResetConfig"
-            >
-              🔄 重置为默认值
             </button>
           </div>
         </div>
 
-        <div v-if="configLoading" class="flex-1 flex items-center justify-center text-text-muted">
+        <!-- Global loading / error -->
+        <div v-if="configLoading" class="flex items-center justify-center py-16 text-text-muted">
+          <span class="inline-block w-5 h-5 border-2 border-text-muted border-t-transparent rounded-full animate-spin mr-2"></span>
+            加载中...
+          </div>
+        <div v-else-if="configError" class="text-red-400 text-sm py-4">{{ configError }}</div>
+
+        <template v-else>
+          <!-- ===== 快捷入口（无配置时引导） ===== -->
+          <div v-if="llmConfigs.length === 0 || promptConfigs.length === 0" class="flex gap-3">
+            <div
+              v-if="llmConfigs.length === 0"
+              class="flex-1 flex items-center gap-3 px-4 py-3 rounded-xl border border-dashed border-border bg-bg-card text-xs text-text-muted"
+            >
+              <span class="text-base shrink-0">🤖</span>
+              <span class="flex-1">尚未创建任何模型配置</span>
+              <button
+                class="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium transition-colors shrink-0"
+                @click="activeTab = 'llm-config'"
+              >➕ 创建模型配置</button>
+            </div>
+            <div
+              v-if="promptConfigs.length === 0"
+              class="flex-1 flex items-center gap-3 px-4 py-3 rounded-xl border border-dashed border-border bg-bg-card text-xs text-text-muted"
+            >
+              <span class="text-base shrink-0">📝</span>
+              <span class="flex-1">尚未创建任何提示词配置</span>
+              <button
+                class="px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-medium transition-colors shrink-0"
+                @click="activeTab = 'prompt-config'"
+              >➕ 创建提示词</button>
+            </div>
+          </div>
+
+          <!-- ===== MinerU Token ===== -->
+          <div class="rounded-xl bg-bg-card border border-border overflow-hidden">
+            <div class="px-5 py-3.5 border-b border-border bg-bg-elevated/40 flex items-center gap-3">
+              <span class="text-base leading-none">🔑</span>
+              <div class="flex-1 min-w-0">
+                <h2 class="text-sm font-semibold text-text-primary">MinerU Token</h2>
+                <p class="text-[11px] text-text-muted">用于 PDF 解析的 MinerU 服务凭证，在 mineru.net/apiManage/token 申请</p>
+              </div>
+            </div>
+            <div class="px-5 py-4 flex items-center gap-2">
+              <div class="relative flex-1">
+                <input
+                  v-model="mineruTokenValue"
+                  :type="mineruTokenVisible ? 'text' : 'password'"
+                  placeholder="请输入 MinerU Token"
+                  class="w-full px-3 py-2 bg-bg-elevated border border-border rounded-lg text-sm text-text-primary focus:outline-none focus:ring-1 focus:ring-blue-500/50 transition-colors pr-10 font-mono"
+                />
+                <button
+                  class="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-secondary transition-colors text-xs select-none"
+                  @click="mineruTokenVisible = !mineruTokenVisible"
+                >{{ mineruTokenVisible ? '🙈' : '👁' }}</button>
+              </div>
+              <button
+                :disabled="savingMineruToken"
+                class="shrink-0 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium transition-colors disabled:opacity-50"
+                @click="handleSaveMineruToken"
+              >{{ savingMineruToken ? '保存中…' : '💾 保存' }}</button>
+            </div>
+          </div>
+
+          <!-- ===== 功能模块卡片 ===== -->
+          <div v-for="mod in configModules" :key="mod.key" class="rounded-xl bg-bg-card border border-border overflow-hidden">
+            <!-- Module header -->
+            <div class="px-5 py-3.5 border-b border-border bg-bg-elevated/40 flex items-center gap-3">
+              <span class="text-base leading-none">{{ mod.icon }}</span>
+              <div class="flex-1 min-w-0">
+                <h2 class="text-sm font-semibold text-text-primary">{{ mod.label }}</h2>
+                <p class="text-[11px] text-text-muted">{{ mod.desc }}</p>
+              </div>
+            </div>
+
+            <div class="divide-y divide-border/50">
+              <!-- LLM row -->
+              <div v-if="mod.llmPrefix" class="px-5 py-3.5 flex items-center gap-3">
+                <div class="w-32 shrink-0 flex items-center gap-1.5">
+                  <span class="text-sm">🤖</span>
+                  <span class="text-xs font-medium text-text-secondary">调用模型</span>
+                </div>
+
+                <div class="flex-1 min-w-0">
+                  <div v-if="selectedLlmConfigIds[mod.llmPrefix]" class="flex items-center gap-1.5 text-xs">
+                    <span class="w-1.5 h-1.5 rounded-full bg-green-400 shrink-0"></span>
+                    <span class="font-medium text-text-secondary">{{ llmConfigs.find(c => c.id === selectedLlmConfigIds[mod.llmPrefix])?.name || '—' }}</span>
+                    <span class="text-text-muted truncate">· {{ configValues[prefixModelKey[mod.llmPrefix]] }}</span>
+                  </div>
+                  <div v-else class="text-[11px] text-text-muted italic">
+                    {{ llmConfigs.length === 0 ? '暂无模型配置' : '未匹配到已存储配置' }}
+                  </div>
+                </div>
+
+                <select
+                  v-model="selectedLlmConfigIds[mod.llmPrefix]"
+                  class="w-40 px-2.5 py-1.5 rounded-lg bg-bg-elevated border border-border text-text-primary text-xs focus:outline-none focus:ring-1 focus:ring-blue-500/50 cursor-pointer"
+                >
+                  <option :value="null">— 选择配置 —</option>
+                  <option v-for="cfg in llmConfigs" :key="cfg.id" :value="cfg.id">{{ cfg.name }}</option>
+                </select>
+
+                <button
+                  :disabled="!selectedLlmConfigIds[mod.llmPrefix] || applyingModelPrefix === mod.llmPrefix"
+                  class="shrink-0 px-3.5 py-1.5 rounded-lg text-xs font-medium bg-blue-600 hover:bg-blue-500 text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  @click="handleApplyLlmConfig(mod.llmPrefix!)"
+                >
+                  {{ applyingModelPrefix === mod.llmPrefix ? '应用中…' : '应用' }}
+                </button>
+              </div>
+
+              <!-- Prompt rows -->
+              <div v-for="prompt in mod.prompts" :key="prompt.variable" class="px-5 py-3.5 flex items-center gap-3">
+                <div class="w-32 shrink-0 flex items-center gap-1.5">
+                  <span class="text-sm">📝</span>
+                  <span class="text-xs font-medium text-text-secondary">{{ prompt.label }}</span>
+                </div>
+
+                <div class="flex-1 min-w-0">
+                  <div v-if="selectedPromptConfigIds[prompt.variable]" class="flex items-center gap-1.5 text-xs">
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0"></span>
+                    <span class="font-medium text-text-secondary">{{ promptConfigs.find(c => c.id === selectedPromptConfigIds[prompt.variable])?.name || '—' }}</span>
+                  </div>
+                  <div v-else class="text-[11px] text-text-muted italic">
+                    {{ promptConfigs.length === 0 ? '暂无提示词配置' : '未匹配到已存储配置' }}
+                  </div>
+                </div>
+
+                <select
+                  v-model="selectedPromptConfigIds[prompt.variable]"
+                  class="w-40 px-2.5 py-1.5 rounded-lg bg-bg-elevated border border-border text-text-primary text-xs focus:outline-none focus:ring-1 focus:ring-purple-500/50 cursor-pointer"
+                >
+                  <option :value="null">— 选择配置 —</option>
+                  <option v-for="cfg in promptConfigs" :key="cfg.id" :value="cfg.id">{{ cfg.name }}</option>
+                </select>
+
+                <button
+                  :disabled="!selectedPromptConfigIds[prompt.variable] || applyingPromptVariable === prompt.variable"
+                  class="shrink-0 px-3.5 py-1.5 rounded-lg text-xs font-medium bg-purple-600 hover:bg-purple-500 text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  @click="handleApplyPromptConfig(prompt.variable)"
+                >
+                  {{ applyingPromptVariable === prompt.variable ? '应用中…' : '应用' }}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- ===== 字数上限配置 ===== -->
+          <div class="rounded-xl bg-bg-card border border-border overflow-hidden">
+            <div class="px-5 py-3.5 border-b border-border bg-bg-elevated/40 flex items-center justify-between">
+              <div class="flex items-center gap-3">
+                <span class="text-base leading-none">📏</span>
+                <div>
+                  <h2 class="text-sm font-semibold text-text-primary">字数上限配置</h2>
+                  <p class="text-[11px] text-text-muted">控制摘要各部分的字数上限（按去空白字符计），超出则调用模型压缩</p>
+                </div>
+              </div>
+              <button
+                :disabled="savingWordLimits"
+                class="px-4 py-1.5 rounded-lg bg-green-600 hover:bg-green-500 text-white text-xs font-medium transition-colors disabled:opacity-50 shrink-0"
+                @click="handleSaveWordLimits"
+              >
+                {{ savingWordLimits ? '保存中...' : '💾 保存' }}
+              </button>
+            </div>
+            <div class="p-5">
+              <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                <div v-for="(defaultVal, key) in wordLimitDefaults" :key="key">
+                  <label class="block text-xs font-medium text-text-secondary mb-1.5">{{ wordLimitLabels[key] }}</label>
+                  <div class="flex items-center gap-1.5">
+                    <input
+                      v-model.number="wordLimitValues[key]"
+                      type="number"
+                      step="10"
+                      min="10"
+                      class="flex-1 min-w-0 px-3 py-2 bg-bg-elevated border border-border rounded-lg text-sm text-text-primary focus:outline-none focus:ring-1 focus:ring-blue-500/50 transition-colors"
+                    />
+                    <button
+                      v-if="wordLimitValues[key] !== defaultVal"
+                      class="shrink-0 px-2 py-1.5 rounded text-[11px] border border-border text-text-muted hover:text-text-secondary hover:border-text-muted transition-colors"
+                      title="重置为默认值"
+                      @click="wordLimitValues[key] = defaultVal"
+                    >↺</button>
+                  </div>
+                  <p class="text-[10px] text-text-muted mt-0.5">默认: {{ defaultVal }}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </template>
+        </div><!-- /max-w-3xl -->
+      </div>
+
+      <!-- ============================================================= -->
+      <!-- Page: LLM Config Management -->
+      <!-- ============================================================= -->
+      <div v-if="activeTab === 'llm-config'" class="flex-1 flex flex-col p-6 gap-4 overflow-auto">
+        <div class="shrink-0 flex items-center justify-between">
+          <div>
+            <h1 class="text-lg font-bold text-text-primary">🤖 模型配置管理</h1>
+            <p class="text-xs text-text-muted mt-0.5">管理大模型配置，支持应用到不同功能模块</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <button
+              class="px-3 py-1.5 rounded-full border border-border text-xs text-text-secondary bg-transparent cursor-pointer hover:bg-bg-hover transition-colors"
+              @click="loadLlmConfigs"
+            >
+              🔄 刷新
+            </button>
+            <button
+              class="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium transition-colors"
+              @click="startEditLlmConfig()"
+            >
+              ➕ 新建配置
+            </button>
+          </div>
+        </div>
+
+        <div v-if="llmConfigLoading" class="flex-1 flex items-center justify-center text-text-muted">
           <div class="flex items-center gap-2">
             <span class="inline-block w-4 h-4 border-2 border-text-muted border-t-transparent rounded-full animate-spin"></span>
             加载中...
           </div>
         </div>
-        <div v-else-if="configError" class="flex-1 flex items-center justify-center text-red-400">{{ configError }}</div>
-        <div v-else class="flex-1 overflow-auto space-y-4">
-          <div v-for="group in configGroups" :key="group.name" class="rounded-xl bg-bg-card border border-border overflow-hidden">
-            <!-- Group Header (Collapsible) -->
-            <button
-              class="w-full px-5 py-4 flex items-center justify-between hover:bg-bg-hover transition-colors"
-              @click="toggleGroup(group.name)"
-            >
-              <h2 class="text-sm font-semibold text-text-primary">{{ group.name }}</h2>
-              <span class="text-text-muted text-lg transition-transform" :class="isGroupExpanded(group.name) ? 'rotate-90' : ''">
-                ▶
-              </span>
-            </button>
-            
-            <!-- Group Content (Collapsible) -->
-            <div v-show="isGroupExpanded(group.name)" class="px-5 pb-5 space-y-4">
-              
-              <!-- 大模型配置和提示词配置使用表格模式 -->
-              <template v-if="group.name === '大模型调用配置' || group.name === '提示词配置'">
-                <div v-for="(subGroupKeys, subGroupName) in (group.name === '大模型调用配置' ? llmSubGroups : promptSubGroups)" :key="subGroupName" class="mb-6">
-                  <h3 class="text-xs font-medium text-text-secondary mb-3">{{ subGroupName }}</h3>
-                  
-                  <!-- 配置表格 -->
-                  <div class="rounded-lg bg-bg-elevated border border-border overflow-hidden mb-3">
-                    <div class="overflow-x-auto">
-                      <table class="w-full text-sm min-w-full">
-                        <thead class="bg-bg-sidebar border-b border-border">
-                          <tr>
-                            <th class="text-left px-4 py-2 font-medium text-text-muted text-xs w-12 sticky left-0 bg-bg-sidebar z-10">
-                              <input type="checkbox" class="cursor-pointer" />
-                            </th>
-                            <th v-for="item in getSubGroupItems(group.name, subGroupName, group.items)" :key="item.key" class="text-left px-4 py-2 font-medium text-text-muted text-xs whitespace-nowrap min-w-[150px]">
-                              {{ item.key }}
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          <tr class="border-b border-border/50 hover:bg-bg-hover/30 transition-colors">
-                            <td class="px-4 py-3 sticky left-0 bg-bg-elevated z-10">
-                              <input type="checkbox" class="cursor-pointer" />
-                            </td>
-                            <td v-for="item in getSubGroupItems(group.name, subGroupName, group.items)" :key="item.key" class="px-4 py-3 text-text-primary text-xs whitespace-nowrap">
-                              <span v-if="item.is_sensitive" class="font-mono">{{ maskSensitiveValue(configValues[item.key], true) }}</span>
-                              <span v-else class="truncate max-w-[200px] block" :title="String(configValues[item.key] ?? '')">
-                                {{ String(configValues[item.key] ?? '').substring(0, 50) }}{{ String(configValues[item.key] ?? '').length > 50 ? '...' : '' }}
-                              </span>
-                            </td>
-                          </tr>
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                  
-                  <!-- 编辑表单 -->
-                  <div class="rounded-lg bg-bg-elevated border border-border p-4 space-y-3">
-                    <div v-for="item in getSubGroupItems(group.name, subGroupName, group.items)" :key="item.key" class="flex flex-col gap-2">
-                      <label class="block text-xs font-medium text-text-primary">
-                        {{ item.key }}
-                        <span v-if="item.is_sensitive" class="ml-1 text-[10px] text-amber-400">(敏感信息)</span>
-                        <span v-if="item.description" class="ml-2 text-[10px] text-text-muted font-normal">- {{ item.description }}</span>
-                      </label>
-                      
-                      <!-- 布尔值 -->
-                      <div v-if="item.type === 'bool'" class="flex items-center gap-2">
-                        <label class="relative inline-flex items-center cursor-pointer">
-                          <input
-                            type="checkbox"
-                            class="sr-only peer"
-                            :checked="configValues[item.key] === true"
-                            @change="configValues[item.key] = ($event.target as HTMLInputElement).checked"
-                          />
-                          <div class="w-11 h-6 bg-gray-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                        </label>
-                        <span class="text-sm text-text-secondary">{{ configValues[item.key] ? '开启' : '关闭' }}</span>
-                      </div>
-                      
-                      <!-- 数字 -->
-                      <input
-                        v-else-if="item.type === 'int' || item.type === 'float'"
-                        :value="String(configValues[item.key] ?? '')"
-                        :type="'number'"
-                        :step="item.type === 'float' ? '0.1' : undefined"
-                        class="w-full px-3 py-2 rounded-lg bg-bg border border-border text-text-primary text-sm focus:outline-none focus:ring-1 focus:ring-blue-500/50"
-                        @input="(e) => { const val = (e.target as HTMLInputElement).value; if (item.type === 'int') configValues[item.key] = parseInt(val, 10) || 0; else if (item.type === 'float') configValues[item.key] = parseFloat(val) || 0; }"
-                      />
-                      
-                      <!-- 长字符串使用 textarea -->
-                      <textarea
-                        v-else-if="item.type === 'str' && (typeof configValues[item.key] === 'string' && configValues[item.key].length > 100)"
-                        :value="String(configValues[item.key] ?? '')"
-                        class="w-full px-3 py-2 rounded-lg bg-bg border border-border text-text-primary text-sm font-mono focus:outline-none focus:ring-1 focus:ring-blue-500/50 resize-y min-h-[100px]"
-                        @input="configValues[item.key] = ($event.target as HTMLTextAreaElement).value"
-                      />
-                      
-                      <!-- 普通字符串 -->
-                      <input
-                        v-else
-                        :value="String(configValues[item.key] ?? '')"
-                        type="text"
-                        class="w-full px-3 py-2 rounded-lg bg-bg border border-border text-text-primary text-sm focus:outline-none focus:ring-1 focus:ring-blue-500/50"
-                        :class="item.is_sensitive ? 'font-mono' : ''"
-                        @input="configValues[item.key] = ($event.target as HTMLInputElement).value"
-                      />
-                    </div>
-                  </div>
-                </div>
-              </template>
-              
-              <!-- 其他配置使用原来的方式 -->
-              <template v-else>
-                <div class="space-y-4">
-                  <div v-for="item in group.items" :key="item.key" class="flex flex-col gap-2">
-                <div class="flex items-start justify-between gap-4">
-                  <div class="flex-1 min-w-0">
-                    <label class="block text-xs font-medium text-text-primary mb-1">
-                      {{ item.key }}
-                      <span v-if="item.is_sensitive" class="ml-1 text-[10px] text-amber-400">(敏感信息)</span>
-                    </label>
-                    <p v-if="item.description" class="text-[11px] text-text-muted mb-2">{{ item.description }}</p>
-                  </div>
-                  <div class="text-xs text-text-muted font-mono bg-bg-elevated px-2 py-1 rounded">
-                    {{ item.type }}
-                  </div>
-                </div>
-                
-                <!-- 布尔值使用 checkbox -->
-                <div v-if="item.type === 'bool'" class="flex items-center gap-2">
-                  <label class="relative inline-flex items-center cursor-pointer">
-                    <input
-                      type="checkbox"
-                      class="sr-only peer"
-                      :checked="configValues[item.key] === true"
-                      @change="configValues[item.key] = ($event.target as HTMLInputElement).checked"
-                    />
-                    <div class="w-11 h-6 bg-gray-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                  </label>
-                  <span class="text-sm text-text-secondary">{{ configValues[item.key] ? '开启' : '关闭' }}</span>
-                </div>
-                
-                <!-- 数组使用 textarea -->
-                <textarea
-                  v-else-if="item.type === 'list'"
-                  :value="Array.isArray(configValues[item.key]) ? JSON.stringify(configValues[item.key], null, 2) : String(configValues[item.key] ?? '')"
-                  class="w-full px-3 py-2 rounded-lg bg-bg-elevated border border-border text-text-primary text-sm font-mono focus:outline-none focus:ring-1 focus:ring-blue-500/50 resize-y min-h-[80px]"
-                  placeholder='输入 JSON 数组或逗号分隔的值&#10;例如: ["value1", "value2"] 或 value1, value2'
-                  @input="(e) => { try { configValues[item.key] = JSON.parse((e.target as HTMLTextAreaElement).value); } catch { const val = (e.target as HTMLTextAreaElement).value; configValues[item.key] = val.split(',').map(s => s.trim()).filter(s => s); } }"
-                />
-                
-                <!-- 字符串使用 textarea（如果很长） -->
-                <textarea
-                  v-else-if="item.type === 'str' && (typeof configValues[item.key] === 'string' && configValues[item.key].length > 100)"
-                  :value="String(configValues[item.key] ?? '')"
-                  class="w-full px-3 py-2 rounded-lg bg-bg-elevated border border-border text-text-primary text-sm font-mono focus:outline-none focus:ring-1 focus:ring-blue-500/50 resize-y min-h-[100px]"
-                  @input="configValues[item.key] = ($event.target as HTMLTextAreaElement).value"
-                />
-                
-                <!-- 数字和普通字符串使用 input -->
-                <input
-                  v-else
-                  :value="String(configValues[item.key] ?? '')"
-                  :type="item.type === 'int' || item.type === 'float' ? 'number' : 'text'"
-                  :step="item.type === 'float' ? '0.1' : undefined"
-                  class="w-full px-3 py-2 rounded-lg bg-bg-elevated border border-border text-text-primary text-sm focus:outline-none focus:ring-1 focus:ring-blue-500/50"
-                  :class="item.is_sensitive ? 'font-mono' : ''"
-                  :placeholder="item.is_sensitive ? maskSensitiveValue(configValues[item.key], true) : ''"
-                  @input="(e) => { const val = (e.target as HTMLInputElement).value; if (item.type === 'int') configValues[item.key] = parseInt(val, 10) || 0; else if (item.type === 'float') configValues[item.key] = parseFloat(val) || 0; else configValues[item.key] = val; }"
-                />
-                
-                    <!-- 显示默认值提示 -->
-                    <div v-if="configDefaults[item.key] !== undefined && configValues[item.key] !== configDefaults[item.key]" class="text-[10px] text-text-muted italic">
-                      默认值: {{ typeof configDefaults[item.key] === 'object' ? JSON.stringify(configDefaults[item.key]) : String(configDefaults[item.key]) }}
-                    </div>
-                  </div>
-                </div>
-              </template>
+        <div v-else-if="llmConfigError" class="flex-1 flex items-center justify-center text-red-400">{{ llmConfigError }}</div>
+
+        <!-- Edit Form -->
+        <div v-if="llmConfigEditing !== null || Object.keys(llmConfigForm).length > 0" class="rounded-xl bg-bg-card border border-border p-5 shrink-0">
+          <h2 class="text-sm font-semibold text-text-primary mb-4">{{ llmConfigEditing?.id ? '编辑配置' : '新建配置' }}</h2>
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="block text-xs text-text-muted mb-1">配置名称 *</label>
+              <input v-model="llmConfigForm.name" type="text" class="w-full px-3 py-2 rounded-lg bg-bg-elevated border border-border text-text-primary text-sm" />
+            </div>
+            <div>
+              <label class="block text-xs text-text-muted mb-1">备注</label>
+              <input v-model="llmConfigForm.remark" type="text" class="w-full px-3 py-2 rounded-lg bg-bg-elevated border border-border text-text-primary text-sm" />
+            </div>
+            <div>
+              <label class="block text-xs text-text-muted mb-1">Base URL *</label>
+              <input v-model="llmConfigForm.base_url" type="text" class="w-full px-3 py-2 rounded-lg bg-bg-elevated border border-border text-text-primary text-sm font-mono" />
+            </div>
+            <div>
+              <label class="block text-xs text-text-muted mb-1">API Key *</label>
+              <input v-model="llmConfigForm.api_key" type="password" class="w-full px-3 py-2 rounded-lg bg-bg-elevated border border-border text-text-primary text-sm font-mono" />
+            </div>
+            <div>
+              <label class="block text-xs text-text-muted mb-1">Model *</label>
+              <input v-model="llmConfigForm.model" type="text" class="w-full px-3 py-2 rounded-lg bg-bg-elevated border border-border text-text-primary text-sm" />
+            </div>
+            <div>
+              <label class="block text-xs text-text-muted mb-1">Max Tokens</label>
+              <input v-model.number="llmConfigForm.max_tokens" type="number" class="w-full px-3 py-2 rounded-lg bg-bg-elevated border border-border text-text-primary text-sm" />
+            </div>
+            <div>
+              <label class="block text-xs text-text-muted mb-1">Temperature</label>
+              <input v-model.number="llmConfigForm.temperature" type="number" step="0.1" class="w-full px-3 py-2 rounded-lg bg-bg-elevated border border-border text-text-primary text-sm" />
+            </div>
+            <div>
+              <label class="block text-xs text-text-muted mb-1">Concurrency</label>
+              <input v-model.number="llmConfigForm.concurrency" type="number" class="w-full px-3 py-2 rounded-lg bg-bg-elevated border border-border text-text-primary text-sm" />
+            </div>
+            <div>
+              <label class="block text-xs text-text-muted mb-1">Input Hard Limit</label>
+              <input v-model.number="llmConfigForm.input_hard_limit" type="number" class="w-full px-3 py-2 rounded-lg bg-bg-elevated border border-border text-text-primary text-sm" />
+            </div>
+            <div>
+              <label class="block text-xs text-text-muted mb-1">Input Safety Margin</label>
+              <input v-model.number="llmConfigForm.input_safety_margin" type="number" class="w-full px-3 py-2 rounded-lg bg-bg-elevated border border-border text-text-primary text-sm" />
+            </div>
+            <div>
+              <label class="block text-xs text-text-muted mb-1">Endpoint</label>
+              <input v-model="llmConfigForm.endpoint" type="text" class="w-full px-3 py-2 rounded-lg bg-bg-elevated border border-border text-text-primary text-sm" />
+            </div>
+            <div>
+              <label class="block text-xs text-text-muted mb-1">Completion Window</label>
+              <input v-model="llmConfigForm.completion_window" type="text" class="w-full px-3 py-2 rounded-lg bg-bg-elevated border border-border text-text-primary text-sm" />
+            </div>
+            <div>
+              <label class="block text-xs text-text-muted mb-1">Out Root</label>
+              <input v-model="llmConfigForm.out_root" type="text" class="w-full px-3 py-2 rounded-lg bg-bg-elevated border border-border text-text-primary text-sm" />
+            </div>
+            <div>
+              <label class="block text-xs text-text-muted mb-1">JSONL Root</label>
+              <input v-model="llmConfigForm.jsonl_root" type="text" class="w-full px-3 py-2 rounded-lg bg-bg-elevated border border-border text-text-primary text-sm" />
             </div>
           </div>
+          <div class="flex items-center gap-2 mt-4">
+            <button
+              :disabled="llmConfigSaving"
+              class="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium disabled:opacity-50"
+              @click="saveLlmConfig"
+            >
+              {{ llmConfigSaving ? '保存中...' : '💾 保存' }}
+            </button>
+            <button
+              class="px-4 py-2 rounded-lg bg-bg-elevated border border-border text-text-secondary text-sm font-medium hover:bg-bg-hover"
+              @click="llmConfigEditing = null; llmConfigForm = {}"
+            >
+              取消
+            </button>
+          </div>
+        </div>
+
+        <!-- Config List -->
+        <div v-else class="flex-1 overflow-auto rounded-xl bg-bg-card border border-border">
+          <table class="w-full text-sm">
+            <thead class="sticky top-0 z-10">
+              <tr class="bg-bg-sidebar border-b border-border">
+                <th class="text-left px-4 py-3 font-medium text-text-muted">ID</th>
+                <th class="text-left px-4 py-3 font-medium text-text-muted">名称</th>
+                <th class="text-left px-4 py-3 font-medium text-text-muted">Base URL</th>
+                <th class="text-left px-4 py-3 font-medium text-text-muted">Model</th>
+                <th class="text-left px-4 py-3 font-medium text-text-muted">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="config in llmConfigs" :key="config.id" class="border-b border-border/50 hover:bg-bg-hover/30 transition-colors">
+                <td class="px-4 py-3 text-text-muted font-mono text-xs">{{ config.id }}</td>
+                <td class="px-4 py-3 text-text-primary font-medium">{{ config.name }}</td>
+                <td class="px-4 py-3 text-text-secondary text-xs font-mono truncate max-w-[200px]">{{ config.base_url }}</td>
+                <td class="px-4 py-3 text-text-secondary text-xs">{{ config.model }}</td>
+                <td class="px-4 py-3">
+                  <div class="flex items-center gap-2">
+                    <select
+                      :disabled="llmConfigApplying === config.id"
+                      class="px-2 py-1 rounded bg-bg-elevated border border-border text-text-primary text-xs"
+                      @change="applyLlmConfigHandler(config.id, ($event.target as HTMLSelectElement).value)"
+                    >
+                      <option value="">应用到...</option>
+                      <option v-for="opt in usagePrefixOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+                    </select>
+                    <button
+                      class="px-2 py-1 rounded bg-blue-500/20 text-blue-400 text-xs hover:bg-blue-500/30"
+                      @click="startEditLlmConfig(config)"
+                    >
+                      编辑
+                    </button>
+                    <button
+                      class="px-2 py-1 rounded bg-red-500/20 text-red-400 text-xs hover:bg-red-500/30"
+                      @click="deleteLlmConfigHandler(config.id)"
+                    >
+                      删除
+                    </button>
+                  </div>
+                </td>
+              </tr>
+              <tr v-if="llmConfigs.length === 0">
+                <td colspan="5" class="px-4 py-10 text-center text-text-muted">暂无配置</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ============================================================= -->
+      <!-- Page: Prompt Config Management -->
+      <!-- ============================================================= -->
+      <div v-if="activeTab === 'prompt-config'" class="flex-1 flex flex-col p-6 gap-4 overflow-auto">
+        <div class="shrink-0 flex items-center justify-between">
+          <div>
+            <h1 class="text-lg font-bold text-text-primary">📝 提示词配置管理</h1>
+            <p class="text-xs text-text-muted mt-0.5">管理提示词配置，支持应用到不同功能模块</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <button
+              class="px-3 py-1.5 rounded-full border border-border text-xs text-text-secondary bg-transparent cursor-pointer hover:bg-bg-hover transition-colors"
+              @click="loadPromptConfigs"
+            >
+              🔄 刷新
+            </button>
+            <button
+              class="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium transition-colors"
+              @click="startEditPromptConfig()"
+            >
+              ➕ 新建配置
+            </button>
+          </div>
+        </div>
+
+        <div v-if="promptConfigLoading" class="flex-1 flex items-center justify-center text-text-muted">
+          <div class="flex items-center gap-2">
+            <span class="inline-block w-4 h-4 border-2 border-text-muted border-t-transparent rounded-full animate-spin"></span>
+            加载中...
+          </div>
+        </div>
+        <div v-else-if="promptConfigError" class="flex-1 flex items-center justify-center text-red-400">{{ promptConfigError }}</div>
+
+        <!-- Edit Form -->
+        <div v-if="promptConfigEditing !== null || Object.keys(promptConfigForm).length > 0" class="rounded-xl bg-bg-card border border-border p-5 shrink-0">
+          <h2 class="text-sm font-semibold text-text-primary mb-4">{{ promptConfigEditing?.id ? '编辑配置' : '新建配置' }}</h2>
+          <div class="grid grid-cols-2 gap-4 mb-4">
+            <div>
+              <label class="block text-xs text-text-muted mb-1">配置名称 *</label>
+              <input v-model="promptConfigForm.name" type="text" class="w-full px-3 py-2 rounded-lg bg-bg-elevated border border-border text-text-primary text-sm" />
+            </div>
+            <div>
+              <label class="block text-xs text-text-muted mb-1">备注</label>
+              <input v-model="promptConfigForm.remark" type="text" class="w-full px-3 py-2 rounded-lg bg-bg-elevated border border-border text-text-primary text-sm" />
+            </div>
+          </div>
+          <div>
+            <label class="block text-xs text-text-muted mb-1">提示词内容 *</label>
+            <textarea
+              v-model="promptConfigForm.prompt_content"
+              class="w-full px-3 py-2 rounded-lg bg-bg-elevated border border-border text-text-primary text-sm font-mono resize-y min-h-[200px]"
+            />
+          </div>
+          <div class="flex items-center gap-2 mt-4">
+            <button
+              :disabled="promptConfigSaving"
+              class="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium disabled:opacity-50"
+              @click="savePromptConfig"
+            >
+              {{ promptConfigSaving ? '保存中...' : '💾 保存' }}
+            </button>
+            <button
+              class="px-4 py-2 rounded-lg bg-bg-elevated border border-border text-text-secondary text-sm font-medium hover:bg-bg-hover"
+              @click="promptConfigEditing = null; promptConfigForm = {}"
+            >
+              取消
+            </button>
+          </div>
+        </div>
+
+        <!-- Config List -->
+        <div v-else class="flex-1 overflow-auto rounded-xl bg-bg-card border border-border">
+          <table class="w-full text-sm">
+            <thead class="sticky top-0 z-10">
+              <tr class="bg-bg-sidebar border-b border-border">
+                <th class="text-left px-4 py-3 font-medium text-text-muted">ID</th>
+                <th class="text-left px-4 py-3 font-medium text-text-muted">名称</th>
+                <th class="text-left px-4 py-3 font-medium text-text-muted">内容预览</th>
+                <th class="text-left px-4 py-3 font-medium text-text-muted">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="config in promptConfigs" :key="config.id" class="border-b border-border/50 hover:bg-bg-hover/30 transition-colors">
+                <td class="px-4 py-3 text-text-muted font-mono text-xs">{{ config.id }}</td>
+                <td class="px-4 py-3 text-text-primary font-medium">{{ config.name }}</td>
+                <td class="px-4 py-3 text-text-secondary text-xs max-w-[300px] truncate">{{ config.prompt_content.substring(0, 100) }}{{ config.prompt_content.length > 100 ? '...' : '' }}</td>
+                <td class="px-4 py-3">
+                  <div class="flex items-center gap-2">
+                    <select
+                      :disabled="promptConfigApplying === config.id"
+                      class="px-2 py-1 rounded bg-bg-elevated border border-border text-text-primary text-xs"
+                      @change="applyPromptConfigHandler(config.id, ($event.target as HTMLSelectElement).value)"
+                    >
+                      <option value="">应用到...</option>
+                      <option v-for="opt in promptVariableOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+                    </select>
+                    <button
+                      class="px-2 py-1 rounded bg-blue-500/20 text-blue-400 text-xs hover:bg-blue-500/30"
+                      @click="startEditPromptConfig(config)"
+                    >
+                      编辑
+                    </button>
+                    <button
+                      class="px-2 py-1 rounded bg-red-500/20 text-red-400 text-xs hover:bg-red-500/30"
+                      @click="deletePromptConfigHandler(config.id)"
+                    >
+                      删除
+                    </button>
+                  </div>
+                </td>
+              </tr>
+              <tr v-if="promptConfigs.length === 0">
+                <td colspan="4" class="px-4 py-10 text-center text-text-muted">暂无配置</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </div>
     </div>

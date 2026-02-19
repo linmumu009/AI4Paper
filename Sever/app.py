@@ -165,6 +165,13 @@ def main(argv=None):
                 sllm_value = str(iv)
         # 从传给首个 step 的参数中移除 --SLLM 及其值，避免下游脚本 argparse 报错
         extra = extra[:idx] + extra[idx + 2:]
+    # --user-id（可选，传给 paper_summary / summary_limit 以使用用户自定义配置）
+    user_id_value = os.environ.get("PIPELINE_USER_ID")
+    if "--user-id" in extra:
+        idx = extra.index("--user-id")
+        if idx + 1 < len(extra):
+            user_id_value = extra[idx + 1]
+        extra = extra[:idx] + extra[idx + 2:]
     # --Zo（T/F，控制是否执行最后一步 Zotero 导入；默认 F = 关闭）
     zo_value = os.environ.get("ZO", "F")
     if "--Zo" in extra:
@@ -178,9 +185,11 @@ def main(argv=None):
     zo_value = (zo_value or "F").strip().upper()
     if zo_value not in ("T", "F"):
         zo_value = "F"
-    env = {**os.environ, "RUN_DATE": run_date}
+    env = {**os.environ, "RUN_DATE": run_date, "PYTHONIOENCODING": "utf-8"}
     if sllm_value is not None:
         env["SLLM"] = sllm_value
+    if user_id_value is not None:
+        env["PIPELINE_USER_ID"] = str(user_id_value)
     steps = PIPELINES.get(pipeline)
     if not steps:
         raise SystemExit(f"Unknown pipeline: {pipeline}")
@@ -193,11 +202,17 @@ def main(argv=None):
         f"START pipeline '{pipeline}' with {len(steps)} step(s) RUN_DATE={run_date} Zo={zo_value}",
         flush=True,
     )
+    # Steps that accept --user-id for per-user config overrides
+    _USER_ID_STEPS = {"llm_select_theme", "pdf_info", "paper_assets", "paper_summary", "summary_limit"}
+
     for i, step in enumerate(steps):
         if i == 0:
-            step_args = extra
+            step_args = list(extra)
         else:
             step_args = []
+        # Forward --user-id to supported steps
+        if user_id_value and step in _USER_ID_STEPS:
+            step_args.extend(["--user-id", str(user_id_value)])
         if step_output_exists(step, run_date):
             print(f"SKIP step: {step} (output exists for {run_date})", flush=True)
             continue

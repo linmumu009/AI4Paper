@@ -261,6 +261,11 @@ export interface PipelineRunStatus {
     date?: string
     sllm?: number | null
     zo?: string
+    days?: number | null
+    categories?: string | null
+    extra_query?: string | null
+    max_papers?: number | null
+    anchor_tz?: string | null
   }
 }
 
@@ -300,4 +305,69 @@ export interface SystemConfigResponse {
 export interface SystemConfigUpdateResponse {
   ok: boolean
   config: Record<string, any>
+}
+
+// ---------------------------------------------------------------------------
+// LLM Config types
+// ---------------------------------------------------------------------------
+
+export interface LlmConfig {
+  id: number
+  name: string
+  remark?: string
+  base_url: string
+  api_key: string
+  model: string
+  max_tokens?: number
+  temperature?: number
+  concurrency?: number
+  input_hard_limit?: number
+  input_safety_margin?: number
+  endpoint?: string
+  completion_window?: string
+  out_root?: string
+  jsonl_root?: string
+  created_at: string
+  updated_at: string
+}
+
+// ---------------------------------------------------------------------------
+// Prompt Config types
+// ---------------------------------------------------------------------------
+
+export interface PromptConfig {
+  id: number
+  name: string
+  remark?: string
+  prompt_content: string
+  created_at: string
+  updated_at: string
+}
+
+// ---------------------------------------------------------------------------
+// User Preset types
+// ---------------------------------------------------------------------------
+
+export interface UserLlmPreset {
+  id: number
+  user_id: number
+  name: string
+  base_url: string
+  api_key: string
+  model: string
+  max_tokens?: number | null
+  temperature?: number | null
+  input_hard_limit?: number | null
+  input_safety_margin?: number | null
+  created_at: string
+  updated_at: string
+}
+
+export interface UserPromptPreset {
+  id: number
+  user_id: number
+  name: string
+  prompt_content: string
+  created_at: string
+  updated_at: string
 }

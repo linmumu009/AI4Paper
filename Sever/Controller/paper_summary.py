@@ -6,7 +6,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
-from typing import List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from openai import OpenAI
 
@@ -32,6 +32,141 @@ from config.config import (
     DATA_ROOT,
     SLLM,
 )
+
+
+# ---------------------------------------------------------------------------
+# User‑override helpers
+# ---------------------------------------------------------------------------
+
+def _load_user_config(user_id: int) -> Dict[str, Any]:
+    """Load merged paper_recommend settings for *user_id*.
+
+    Returns an empty dict when the user has no overrides (or on any error),
+    so the caller can safely fall back to config.py defaults.
+    """
+    try:
+        from services.user_settings_service import get_settings
+        return get_settings(user_id, "paper_recommend")
+    except Exception:
+        return {}
+
+
+def _resolve_llm_preset(user_id: int, preset_id: Any) -> Dict[str, Any]:
+    """Fetch an LLM preset row; returns empty dict on miss."""
+    try:
+        pid = int(preset_id)
+    except (TypeError, ValueError):
+        return {}
+    try:
+        from services.user_presets_service import get_llm_preset
+        return get_llm_preset(user_id, pid) or {}
+    except Exception:
+        return {}
+
+
+def _resolve_prompt_preset(user_id: int, preset_id: Any) -> str:
+    """Fetch a prompt preset's content; returns empty string on miss."""
+    try:
+        pid = int(preset_id)
+    except (TypeError, ValueError):
+        return ""
+    try:
+        from services.user_presets_service import get_prompt_preset
+        p = get_prompt_preset(user_id, pid)
+        return (p or {}).get("prompt_content", "")
+    except Exception:
+        return ""
+
+
+def make_client_for_user(user_id: Optional[int] = None) -> Tuple[OpenAI, Dict[str, Any]]:
+    """Return (client, effective_cfg) honouring user overrides when *user_id* is given.
+
+    ``effective_cfg`` contains the resolved values for ``system_prompt``,
+    ``temperature``, ``max_tokens``, ``input_hard_limit``, ``input_safety_margin``,
+    and ``model`` so that callers don't have to look them up again.
+    """
+    # Start from config.py defaults
+    cfg: Dict[str, Any] = {
+        "system_prompt": system_prompt,
+        "temperature": summary_temperature,
+        "max_tokens": summary_max_tokens,
+        "input_hard_limit": summary_input_hard_limit,
+        "input_safety_margin": summary_input_safety_margin,
+    }
+
+    key: str = ""
+    base: str = ""
+    model: str = ""
+
+    if user_id is not None:
+        ucfg = _load_user_config(user_id)
+        if ucfg:
+            # LLM connection — module-specific preset first, then generic fallback
+            preset_id = ucfg.get("summary_llm_preset_id") or ucfg.get("llm_preset_id")
+            preset = _resolve_llm_preset(user_id, preset_id) if preset_id else {}
+            if preset:
+                key = (preset.get("api_key") or "").strip()
+                base = (preset.get("base_url") or "").strip()
+                model = (preset.get("model") or "").strip()
+                if preset.get("temperature") is not None:
+                    cfg["temperature"] = preset["temperature"]
+                if preset.get("max_tokens") is not None:
+                    cfg["max_tokens"] = preset["max_tokens"]
+                if preset.get("input_hard_limit") is not None:
+                    cfg["input_hard_limit"] = preset["input_hard_limit"]
+                if preset.get("input_safety_margin") is not None:
+                    cfg["input_safety_margin"] = preset["input_safety_margin"]
+            else:
+                key = (ucfg.get("llm_api_key") or "").strip()
+                base = (ucfg.get("llm_base_url") or "").strip()
+                model = (ucfg.get("llm_model") or "").strip()
+                if ucfg.get("temperature") is not None:
+                    cfg["temperature"] = ucfg["temperature"]
+                if ucfg.get("max_tokens") is not None:
+                    cfg["max_tokens"] = ucfg["max_tokens"]
+                if ucfg.get("input_hard_limit") is not None:
+                    cfg["input_hard_limit"] = ucfg["input_hard_limit"]
+                if ucfg.get("input_safety_margin") is not None:
+                    cfg["input_safety_margin"] = ucfg["input_safety_margin"]
+
+            # Prompt — preset takes priority
+            prompt_preset_id = ucfg.get("prompt_preset_id")
+            prompt_content = _resolve_prompt_preset(user_id, prompt_preset_id) if prompt_preset_id else ""
+            if prompt_content:
+                cfg["system_prompt"] = prompt_content
+            elif ucfg.get("system_prompt"):
+                cfg["system_prompt"] = ucfg["system_prompt"]
+
+    # If user config didn't provide LLM credentials, fall back to config.py
+    if not key or not base:
+        if SLLM == 2:
+            key = (summary_gptgod_apikey or "").strip()
+            base = (summary_base_url_2 or "").strip()
+            model = summary_model_2
+        elif SLLM == 3:
+            key = (summary_apikey_3 or "").strip()
+            base = (summary_base_url_3 or "").strip()
+            model = summary_model_3
+        else:
+            key = (qwen_api_key or "").strip()
+            base = (summary_base_url or "").strip()
+            model = summary_model
+    elif not model:
+        # User provided key/base but no model — use config.py default model
+        if SLLM == 2:
+            model = summary_model_2
+        elif SLLM == 3:
+            model = summary_model_3
+        else:
+            model = summary_model
+
+    if not key:
+        raise SystemExit("LLM API key missing (neither user preset nor config.py)")
+    if not base:
+        raise SystemExit("LLM base URL missing (neither user preset nor config.py)")
+
+    cfg["model"] = model
+    return OpenAI(api_key=key, base_url=base), cfg
 
 
 def approx_input_tokens(text: str) -> int:
@@ -80,55 +215,41 @@ def write_gather(single_dir: Path, gather_dir: Path, date_str: str) -> Path:
 
 
 def make_client() -> OpenAI:
-    # 根据 SLLM 选择不同的大模型服务与密钥
-    if SLLM == 2:
-        key = (summary_gptgod_apikey or "").strip()
-        if not key:
-            raise SystemExit("summary_gptgod_apikey missing in config.config")
-        base = (summary_base_url_2 or "").strip()
-        if not base:
-            raise SystemExit("summary_base_url_2 missing in config.config")
-    elif SLLM == 3:
-        key = (summary_apikey_3 or "").strip()
-        if not key:
-            raise SystemExit("summary_apikey_3 missing in config.config")
-        base = (summary_base_url_3 or "").strip()
-        if not base:
-            raise SystemExit("summary_base_url_3 missing in config.config")
-    else:
-        key = (qwen_api_key or "").strip()
-        if not key:
-            raise SystemExit("qwen_api_key missing in config.config")
-        base = (summary_base_url or "").strip()
-        if not base:
-            raise SystemExit("summary_base_url missing in config.config")
-    return OpenAI(api_key=key, base_url=base)
+    """Legacy entry-point – creates a client using config.py (no user overrides)."""
+    client, _ = make_client_for_user(user_id=None)
+    return client
 
 
-def summarize_one(client: OpenAI, md_path: Path) -> Tuple[Path, str]:
+def summarize_one(
+    client: OpenAI,
+    md_path: Path,
+    *,
+    effective_cfg: Optional[Dict[str, Any]] = None,
+) -> Tuple[Path, str]:
     md_text = md_path.read_text(encoding="utf-8", errors="ignore")
     if not md_text.strip():
         return md_path, ""
-    sys_prompt = system_prompt
+
+    # Use effective_cfg when available (user-overridden); else config.py defaults
+    ecfg = effective_cfg or {}
+    sys_prompt = ecfg.get("system_prompt") or system_prompt
+    hard_limit = int(ecfg.get("input_hard_limit") or summary_input_hard_limit)
+    safety_margin = int(ecfg.get("input_safety_margin") or summary_input_safety_margin)
+    temp = ecfg.get("temperature") if ecfg.get("temperature") is not None else summary_temperature
+    max_tok = ecfg.get("max_tokens") if ecfg.get("max_tokens") is not None else summary_max_tokens
+    model_name = ecfg.get("model") or (summary_model_2 if SLLM == 2 else summary_model_3 if SLLM == 3 else summary_model)
+
     user_content = md_text
-    hard_limit = int(summary_input_hard_limit)
-    safety_margin = int(summary_input_safety_margin)
     limit_total = hard_limit - safety_margin
     sys_tokens = approx_input_tokens(sys_prompt)
     user_budget = max(1, limit_total - sys_tokens)
     user_content = crop_to_input_tokens(user_content, user_budget)
-    kwargs = {}
-    if summary_temperature is not None:
-        kwargs["temperature"] = float(summary_temperature)
-    if summary_max_tokens is not None:
-        kwargs["max_tokens"] = int(summary_max_tokens)
-    # 根据 SLLM 选择对应的模型名称
-    if SLLM == 2:
-        model_name = summary_model_2
-    elif SLLM == 3:
-        model_name = summary_model_3
-    else:
-        model_name = summary_model
+
+    kwargs: Dict[str, Any] = {}
+    if temp is not None:
+        kwargs["temperature"] = float(temp)
+    if max_tok is not None:
+        kwargs["max_tokens"] = int(max_tok)
 
     resp = client.chat.completions.create(
         model=model_name,
@@ -206,6 +327,7 @@ def run() -> None:
     ap.add_argument("--out-root", default=str(Path(DATA_ROOT) / "paper_summary"))
     ap.add_argument("--date", default="")
     ap.add_argument("--concurrency", type=int, default=summary_concurrency)
+    ap.add_argument("--user-id", type=int, default=None, help="User ID for per-user config overrides")
     args = ap.parse_args()
 
     in_root = Path(args.input_dir)
@@ -265,16 +387,16 @@ def run() -> None:
         print(f"[SUMMARY] gather_path={gather_path}", flush=True)
         return
 
-    client = make_client()
+    client, effective_cfg = make_client_for_user(user_id=args.user_id)
     workers = max(1, int(args.concurrency or 0))
-    print(f"[SUMMARY] input_dir={in_dir} total={total} concurrency={workers}", flush=True)
+    print(f"[SUMMARY] input_dir={in_dir} total={total} concurrency={workers} user_id={args.user_id}", flush=True)
 
     start = time.monotonic()
     done = 0
     empty = 0
 
     def task(md_path: Path) -> Tuple[Path, str]:
-        path, content = summarize_one(client, md_path)
+        path, content = summarize_one(client, md_path, effective_cfg=effective_cfg)
         if not content.strip():
             return path, ""
         out_path = single_dir / f"{path.stem}.md"

@@ -58,3 +58,5 @@ reference/
 Thumbs.db
 .idea/
 .vscode/
+
+database/
