@@ -72,6 +72,116 @@ def _ensure_llm_config_columns(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE llm_config ADD COLUMN username TEXT")
 
 
+def seed_default_idea_llm_configs() -> int:
+    """为灵感生成的 7 个阶段写入默认 qwen-plus 模型配置并应用到 config.json。
+
+    逻辑与 prompt_config_service.seed_default_idea_prompts 一致：
+    - 仅当同名条目不存在时才插入（幂等）。
+    - 插入后自动调用 config_service.update_config 将对应的
+      idea_<phase>_base_url / api_key / model 写入 config.json，
+      使管理员后台 detectLlmSelections() 能立刻匹配到。
+    - 如果 qwen_api_key 未设置，仍会写入 base_url / model，
+      api_key 留空（等管理员手动填写后页面会自动匹配）。
+
+    Returns: 新插入的条目数量。
+    """
+    import sys as _sys
+    import os as _os
+    _base = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
+    if _base not in _sys.path:
+        _sys.path.insert(0, _base)
+
+    try:
+        import config.config as _cfg
+    except ImportError:
+        return 0
+
+    _QWEN_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    _QWEN_API_KEY  = (getattr(_cfg, "qwen_api_key", "") or "").strip()
+    _QWEN_MODEL    = "qwen-plus"
+
+    # (llm_config.name, remark, phase_prefix_for_config_key)
+    # phase_prefix → config.py 变量前缀：idea_<prefix>_base_url / api_key / model
+    _SEED_DEFS = [
+        ("灵感·原子抽取模型 [默认]",    "原子抽取阶段 (idea_ingest)",          "idea_ingest"),
+        ("灵感·研究问题生成模型 [默认]", "研究问题生成阶段 (idea_question)",     "idea_question"),
+        ("灵感·候选生成模型 [默认]",     "灵感候选生成阶段 (idea_candidate)",    "idea_candidate"),
+        ("灵感·评审模型 [默认]",         "灵感评审阶段 (idea_review)",           "idea_review"),
+        ("灵感·修订模型 [默认]",         "灵感修订阶段 (idea_revise)",           "idea_revise"),
+        ("灵感·实验计划模型 [默认]",     "实验计划生成阶段 (idea_plan)",         "idea_plan"),
+        ("灵感·评测回放模型 [默认]",     "评测回放阶段 (idea_eval)",             "idea_eval"),
+    ]
+
+    now = _now_iso()
+    conn = _connect()
+    inserted = 0
+    config_updates: Dict[str, Any] = {}
+
+    try:
+        for name, remark, phase_pfx in _SEED_DEFS:
+            # 幂等：已存在则跳过插入
+            row = conn.execute(
+                "SELECT id, base_url, api_key, model FROM llm_config WHERE name = ?",
+                (name,),
+            ).fetchone()
+
+            if not row:
+                conn.execute(
+                    """
+                    INSERT INTO llm_config (
+                        name, remark, base_url, api_key, model,
+                        max_tokens, temperature, input_hard_limit, input_safety_margin,
+                        created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        name, remark,
+                        _QWEN_BASE_URL, _QWEN_API_KEY, _QWEN_MODEL,
+                        8192, 0.7, 129024, 4096,
+                        now, now,
+                    ),
+                )
+                inserted += 1
+                saved_url   = _QWEN_BASE_URL
+                saved_model = _QWEN_MODEL
+            else:
+                saved_url   = row["base_url"]
+                saved_model = row["model"]
+
+        conn.commit()
+    finally:
+        conn.close()
+
+    # 应用到 config.json —— 让 detectLlmSelections 能立刻匹配
+    try:
+        from services import config_service as _cs
+        current = _cs.get_config_with_groups()
+        all_vals: Dict[str, Any] = {}
+        for g in current.get("groups", []):
+            for item in g.get("items", []):
+                all_vals[item["key"]] = item["value"]
+
+        for _name, _remark, phase_pfx in _SEED_DEFS:
+            url_key   = f"{phase_pfx}_base_url"
+            model_key = f"{phase_pfx}_model"
+            # 只要 base_url 或 model 未设置就覆写（api_key 从 config.py 读取，不强制写入空值）
+            if not (all_vals.get(url_key) or "").strip():
+                config_updates[url_key] = _QWEN_BASE_URL
+            if not (all_vals.get(model_key) or "").strip():
+                config_updates[model_key] = _QWEN_MODEL
+            # api_key 仅当有值时才写
+            api_key_cfg = f"{phase_pfx}_api_key"
+            if _QWEN_API_KEY and not (all_vals.get(api_key_cfg) or "").strip():
+                config_updates[api_key_cfg] = _QWEN_API_KEY
+
+        if config_updates:
+            _cs.update_config(config_updates)
+    except Exception as e:
+        print(f"[WARN] seed_default_idea_llm_configs: failed to write config updates: {e}")
+
+    return inserted
+
+
 def list_configs(username: Optional[str] = None) -> List[Dict[str, Any]]:
     """获取模型配置列表。
 

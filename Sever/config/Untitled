@@ -1,0 +1,1 @@
+git rm --cached -- "Sever/config/sms_config.py"

@@ -36,7 +36,7 @@ function cleanBullet(s: string): string {
             : paper.relevance_score >= 0.4
               ? 'border-tag-score-mid text-tag-score-mid'
               : 'border-tag-score-low text-tag-score-low'"
-          :style="{ background: 'rgba(0,0,0,0.5)' }"
+          :style="{ background: 'var(--color-bg-elevated)' }"
         >
           {{ (paper.relevance_score * 100).toFixed(0) }}
         </div>
@@ -44,7 +44,7 @@ function cleanBullet(s: string): string {
 
       <!-- === 标题区 === -->
       <div>
-        <h2 class="text-lg font-bold text-white leading-snug">
+        <h2 class="text-xl font-bold text-text-primary leading-snug">
           {{ paper.short_title }}
         </h2>
         <p class="text-sm card-text mt-1">
@@ -58,7 +58,7 @@ function cleanBullet(s: string): string {
       <!-- === 🛎️文章简介 === -->
       <div class="space-y-1.5">
         <h3 class="text-sm font-semibold text-tinder-blue">🛎️ 文章简介</h3>
-        <div class="text-xs card-text space-y-1">
+        <div class="text-sm card-text space-y-1">
           <p v-if="paper['🛎️文章简介']?.['🔸研究问题']">
             <span class="text-tinder-pink font-medium">研究问题：</span>{{ paper['🛎️文章简介']['🔸研究问题'] }}
           </p>
@@ -80,7 +80,7 @@ function cleanBullet(s: string): string {
             <span class="shrink-0 w-5 h-5 rounded-full bg-tinder-blue/20 text-tinder-blue flex items-center justify-center text-[10px] font-bold mt-0.5">
               {{ idx + 1 }}
             </span>
-            <p class="text-xs card-text">
+            <p class="text-sm card-text">
               {{ cleanBullet(item) }}
             </p>
           </div>
@@ -97,7 +97,7 @@ function cleanBullet(s: string): string {
             class="flex items-start gap-2"
           >
             <span class="shrink-0 w-1.5 h-1.5 rounded-full bg-tinder-gold mt-1.5"></span>
-            <p class="text-xs card-text">
+            <p class="text-sm card-text">
               {{ cleanBullet(item) }}
             </p>
           </div>
@@ -107,13 +107,13 @@ function cleanBullet(s: string): string {
       <!-- === 💡个人观点 === -->
       <div v-if="paper['💡个人观点']" class="space-y-1.5">
         <h3 class="text-sm font-semibold text-tinder-blue">💡 个人观点</h3>
-        <p class="text-xs card-text italic">
+        <p class="text-sm card-text italic">
           {{ paper['💡个人观点'] }}
         </p>
       </div>
 
       <!-- === Footer: paper ID === -->
-      <div class="flex items-center justify-between pt-2 border-t border-white/10">
+      <div class="flex items-center justify-between pt-2 border-t border-border">
         <span class="text-xs text-text-muted font-mono">
           {{ paper.paper_id }}
         </span>
@@ -127,9 +127,9 @@ function cleanBullet(s: string): string {
 </template>
 
 <style scoped>
-/* Deep charcoal background */
+/* Card background — uses theme variable */
 .card-bg {
-  background: #1f1f1f;
+  background: var(--color-bg-card);
 }
 
 /* Prominent institution badge */
@@ -143,24 +143,24 @@ function cleanBullet(s: string): string {
   font-family: "Noto Serif SC", "Source Han Serif SC", "STSong", "SimSun", Georgia, serif;
   font-style: italic;
   color: #fff;
-  background: linear-gradient(135deg, #fd267a 0%, #ff6036 100%);
+  background: linear-gradient(135deg, var(--color-gradient-start) 0%, var(--color-gradient-end) 100%);
 }
 
-/* Body text: grey-white #D4D4D4, line-height 1.6 */
+/* Body text: uses theme-aware secondary color */
 .card-text {
-  color: #d4d4d4;
+  color: var(--color-text-secondary);
   line-height: 1.6;
 }
 
 /* Scrollable area inherits the same text defaults */
 .card-body {
-  color: #d4d4d4;
+  color: var(--color-text-secondary);
   line-height: 1.6;
 }
 
 .scrollbar-thin {
   scrollbar-width: thin;
-  scrollbar-color: rgba(255,255,255,0.15) transparent;
+  scrollbar-color: var(--color-border-light) transparent;
 }
 .scrollbar-thin::-webkit-scrollbar {
   width: 4px;
@@ -169,7 +169,7 @@ function cleanBullet(s: string): string {
   background: transparent;
 }
 .scrollbar-thin::-webkit-scrollbar-thumb {
-  background: rgba(255,255,255,0.15);
+  background: var(--color-border-light);
   border-radius: 2px;
 }
 </style>

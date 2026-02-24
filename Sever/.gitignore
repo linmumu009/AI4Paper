@@ -49,6 +49,7 @@ data/file_collect/
 ### 配置文件备份（不进入仓库）
 config/config1.py
 config/config copy.py
+config/sms_config1.py
 
 ### 参考项目（无需纳入版本控制）
 reference/

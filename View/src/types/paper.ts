@@ -212,8 +212,13 @@ export interface KbCompareResultsTree {
 export interface AuthUser {
   id: number
   username: string
+  nickname?: string
   role: UserRole
   tier: UserTier
+  phone?: string | null
+  phone_verified?: boolean
+  is_phone_auto_created?: boolean
+  has_password?: boolean
   created_at: string
   updated_at: string
   last_login_at?: string | null
@@ -227,9 +232,31 @@ export interface AuthPayload {
   password: string
 }
 
+export interface AuthRegisterPayload {
+  username: string
+  password: string
+  phone: string
+  sms_code: string
+}
+
+export interface AuthSmsLoginPayload {
+  phone: string
+  code: string
+}
+
+export interface SmsSendPayload {
+  phone: string
+}
+
+export interface SmsSendResponse {
+  ok: boolean
+  message: string
+}
+
 export interface AuthActionResponse {
   ok: boolean
   user: AuthUser
+  is_new_user?: boolean
 }
 
 export interface AuthMeResponse {
@@ -267,6 +294,8 @@ export interface PipelineRunStatus {
     max_papers?: number | null
     anchor_tz?: string | null
   }
+  /** Run identifier (YYYYMMDD_HHMMSS). Present when disk state is available. */
+  run_id?: string | null
 }
 
 export interface ScheduleConfig {
@@ -276,6 +305,7 @@ export interface ScheduleConfig {
   pipeline: string
   sllm: number | null
   zo: string
+  user_id?: number | null
   last_run_date?: string | null
 }
 
@@ -370,4 +400,227 @@ export interface UserPromptPreset {
   prompt_content: string
   created_at: string
   updated_at: string
+}
+
+// ---------------------------------------------------------------------------
+// Inspiration v2 types (灵感生成 v2)
+// ---------------------------------------------------------------------------
+
+/** Structured extraction unit from a paper */
+export interface IdeaAtom {
+  id: number
+  user_id: number
+  paper_id: string
+  date_str: string
+  atom_type: 'claim' | 'method' | 'setup' | 'limitation' | 'tag'
+  content: string
+  tags: string[]
+  evidence: { text: string; location: string }[]
+  section: string
+  source_file: string
+  created_at: string
+  updated_at: string
+}
+
+/** Research question mined from atoms */
+export interface IdeaQuestion {
+  id: number
+  user_id: number
+  source_atom_ids: number[]
+  question_text: string
+  strategy: string
+  context: Record<string, any>
+  created_at: string
+}
+
+/** Inspiration candidate with scores and revision history */
+export interface IdeaCandidate {
+  id: number
+  user_id: number
+  question_id: number | null
+  title: string
+  goal: string
+  mechanism: string
+  input_atom_ids: number[]
+  evidence: { text: string; location: string }[]
+  risks: string
+  scores: IdeaCandidateScores
+  status: 'draft' | 'review' | 'published' | 'archived'
+  revision_history: IdeaRevisionEntry[]
+  strategy: string
+  folder_id: number | null
+  tags: string[]
+  created_at: string
+  updated_at: string
+}
+
+export interface IdeaCandidateScores {
+  consistency?: number
+  novelty?: number
+  feasibility?: number
+  impact?: number
+  overall?: number
+  [key: string]: number | undefined
+}
+
+export interface IdeaRevisionEntry {
+  type: string
+  scores?: IdeaCandidateScores
+  verdict?: string
+  summary?: string
+  changes?: Record<string, any>
+  [key: string]: any
+}
+
+/** Execution / experiment plan linked to a candidate */
+export interface IdeaPlan {
+  id: number
+  user_id: number
+  candidate_id: number
+  milestones: Record<string, any>[]
+  metrics: string
+  datasets: string
+  ablation: string
+  cost: string
+  timeline: string
+  full_plan: string
+  created_at: string
+  updated_at: string
+}
+
+/** User feedback event on a candidate */
+export interface IdeaFeedback {
+  id: number
+  user_id: number
+  candidate_id: number
+  action: 'collect' | 'discard' | 'modify' | 'implement' | 'rate' | 'view'
+  context: Record<string, any>
+  created_at: string
+}
+
+/** High-quality inspiration pattern */
+export interface IdeaExemplar {
+  id: number
+  user_id: number
+  candidate_id: number | null
+  pattern: Record<string, any>
+  score: number
+  notes: string
+  created_at: string
+  updated_at: string
+}
+
+/** Prompt version record */
+export interface IdeaPromptVersion {
+  id: number
+  user_id: number
+  stage: string
+  version: number
+  prompt_text: string
+  metrics: Record<string, any>
+  created_at: string
+}
+
+/** Evaluation benchmark */
+export interface IdeaBenchmark {
+  id: number
+  user_id: number
+  name: string
+  question_ids: number[]
+  model_version: string
+  results: Record<string, any>
+  created_at: string
+  updated_at: string
+}
+
+/** Dashboard statistics */
+export interface IdeaStats {
+  atom_count: number
+  question_count: number
+  candidate_count: number
+  published_count: number
+  exemplar_count: number
+  atom_type_distribution: Record<string, number>
+}
+
+// -- API Response types ---
+
+export interface IdeaStatsResponse {
+  ok: boolean
+  atom_count: number
+  question_count: number
+  candidate_count: number
+  published_count: number
+  exemplar_count: number
+  atom_type_distribution: Record<string, number>
+}
+
+export interface IdeaAtomsResponse {
+  ok: boolean
+  atoms: IdeaAtom[]
+  count: number
+}
+
+export interface IdeaAtomResponse {
+  ok: boolean
+  atom: IdeaAtom
+}
+
+export interface IdeaQuestionsResponse {
+  ok: boolean
+  questions: IdeaQuestion[]
+  count: number
+}
+
+export interface IdeaCandidatesResponse {
+  ok: boolean
+  candidates: IdeaCandidate[]
+  count: number
+}
+
+export interface IdeaCandidateResponse {
+  ok: boolean
+  candidate: IdeaCandidate
+}
+
+export interface IdeaPlanResponse {
+  ok: boolean
+  plan: IdeaPlan
+}
+
+export interface IdeaFeedbackResponse {
+  ok: boolean
+  feedback?: IdeaFeedback
+  events?: IdeaFeedback[]
+  count?: number
+}
+
+export interface IdeaExemplarsResponse {
+  ok: boolean
+  exemplars: IdeaExemplar[]
+}
+
+export interface IdeaPromptVersionsResponse {
+  ok: boolean
+  versions: IdeaPromptVersion[]
+}
+
+export interface IdeaBenchmarksResponse {
+  ok: boolean
+  benchmarks: IdeaBenchmark[]
+}
+
+export interface IdeaLibraryTreeResponse {
+  ok: boolean
+  folders: KbTree
+  candidates: IdeaCandidate[]
+}
+
+/** GET /api/idea/digest/:date 响应 */
+export interface IdeaDigestResponse {
+  ok: boolean
+  candidates: IdeaCandidate[]
+  total_available: number
+  quota_limit: number | null
+  tier: string
 }

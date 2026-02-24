@@ -8,7 +8,7 @@ import ComparePanel from '../components/ComparePanel.vue'
 import CompareResultViewer from '../components/CompareResultViewer.vue'
 import NoteEditor from './NoteEditor.vue'
 import PaperDetail from './PaperDetail.vue'
-import { fetchDates, fetchDigest, fetchKbTree, addKbPaper, deleteNote, fetchCompareResultsTree } from '../api'
+import { fetchDates, fetchDigest, fetchKbTree, addKbPaper, deleteNote, fetchCompareResultsTree, dismissPaper } from '../api'
 import type { PaperSummary, KbTree, KbCompareResultsTree } from '../types/paper'
 import { currentTier, ensureAuthInitialized, isAuthenticated } from '../stores/auth'
 
@@ -40,6 +40,10 @@ const compareTree = ref<KbCompareResultsTree | null>(null)
 const currentPaper = computed(() => papers.value[currentIndex.value] ?? null)
 const remaining = computed(() => papers.value.length - currentIndex.value)
 const allSwiped = computed(() => papers.value.length > 0 && currentIndex.value >= papers.value.length)
+const isActuallyLimited = computed(() => {
+  if (quotaLimit.value === null) return false
+  return totalAvailable.value > papers.value.length
+})
 
 // Count total KB papers for display
 const kbPaperCount = computed(() => {
@@ -95,20 +99,28 @@ onMounted(async () => {
   }
 })
 
-// Load papers on date change
-watch(selectedDate, async (date) => {
-  if (!date) return
+async function loadDigestForDate(date: string, fallbackAuthed = isAuthenticated.value) {
   loading.value = true
   error.value = ''
   try {
     const res = await fetchDigest(date)
-    papers.value = res.papers
-    totalAvailable.value = res.total_available ?? res.papers.length
+    const fetchedPapers = Array.isArray(res.papers) ? res.papers : []
+    papers.value = fetchedPapers
+    totalAvailable.value = res.total_available ?? fetchedPapers.length
     quotaLimit.value = res.quota_limit ?? null
-    responseTier.value = res.tier ?? (isAuthenticated.value ? currentTier.value : 'anonymous')
+    responseTier.value = res.tier ?? (fallbackAuthed ? currentTier.value : 'anonymous')
     currentIndex.value = 0
     history.value = []
     cardAnimClass.value = 'card-enter'
+    if (import.meta.env.DEV) {
+      console.debug('[DailyDigest] digest loaded', {
+        date,
+        papers: papers.value.length,
+        totalAvailable: totalAvailable.value,
+        quotaLimit: quotaLimit.value,
+        tier: responseTier.value,
+      })
+    }
   } catch (e: any) {
     error.value = e?.message || '加载失败'
     papers.value = []
@@ -118,25 +130,38 @@ watch(selectedDate, async (date) => {
   } finally {
     loading.value = false
   }
+}
+
+// Load papers on date change
+watch(selectedDate, async (date) => {
+  if (!date) return
+  await loadDigestForDate(date)
 })
 
 // 判断是否超限（用户已刷完所有允许的论文，且论文数等于配额上限）
 const isQuotaExceeded = computed(() => {
-  if (quotaLimit.value === null) return false
-  return currentIndex.value >= papers.value.length && papers.value.length >= quotaLimit.value
+  if (loading.value) return false
+  const limit = quotaLimit.value
+  const paperCount = papers.value.length
+  if (limit === null || paperCount === 0) return false
+  return currentIndex.value >= paperCount && paperCount >= limit
 })
 
 // 获取超限提示信息
 const quotaExceededMessage = computed(() => {
   const tier = responseTier.value
+  const limit = quotaLimit.value
+  if (import.meta.env.DEV) {
+    console.debug('[DailyDigest] quota message state', { tier, limit })
+  }
   if (tier === 'pro_plus') return ''
   if (tier === 'pro') {
-    return `您已达到 Pro 账号上限（15 条）`
+    return `您已达到 Pro 账号上限（${limit ?? 15} 条）`
   }
-  if (!isAuthenticated.value || tier === 'anonymous') {
-    return `您已达到未登录账号上限（3 条）`
+  if (tier === 'anonymous') {
+    return `您已达到未登录账号上限（${limit ?? 3} 条）`
   }
-  return `您已达到普通账号上限（3 条）`
+  return `您已达到普通账号上限（${limit ?? 3} 条）`
 })
 
 // 不再需要弹窗控制
@@ -152,11 +177,22 @@ watch(
       compareTree.value = null
       activeFolderId.value = null
     }
+    // Login/logout changes user-scoped filtering and quota.
+    // Reload digest to avoid stale index/quota state from previous session.
+    if (selectedDate.value) {
+      const date = selectedDate.value
+      await loadDigestForDate(date, authed)
+    }
   },
 )
 
 function onDateChange(event: Event) {
   selectedDate.value = (event.target as HTMLSelectElement).value
+}
+
+function retryLoad() {
+  if (!selectedDate.value) return
+  loadDigestForDate(selectedDate.value)
 }
 
 // Actions
@@ -171,7 +207,12 @@ function next(direction: 'left' | 'right') {
 }
 
 function skip() {
+  const paper = currentPaper.value
   next('left')
+  // 已登录用户：后台静默标记为"不感兴趣"，下次加载时不再展示
+  if (paper && isAuthenticated.value) {
+    dismissPaper(paper.paper_id).catch(() => {})
+  }
 }
 
 function like() {
@@ -250,6 +291,7 @@ function handleCompare(paperIds: string[]) {
   viewingPdf.value = null
   viewingCompareResultId.value = null
   comparingPaperIds.value = paperIds
+  if (!mql.matches) showSidebar.value = false
 }
 
 function closeCompare() {
@@ -266,6 +308,7 @@ function openCompareResult(resultId: number) {
   viewingPdf.value = null
   comparingPaperIds.value = null
   viewingCompareResultId.value = resultId
+  if (!mql.matches) showSidebar.value = false
 }
 
 function closeCompareResult() {
@@ -274,6 +317,8 @@ function closeCompareResult() {
 
 async function openPaperFromSidebar(paperId: string) {
   viewingPdf.value = null
+  comparingPaperIds.value = null
+  viewingCompareResultId.value = null
   // 如果当前正在编辑笔记，优先处理笔记状态
   if (editingNote.value && noteEditorRef.value) {
     const isEmpty = noteEditorRef.value.isEffectivelyEmpty()
@@ -298,10 +343,14 @@ async function openPaperFromSidebar(paperId: string) {
 
   // 然后跳转到新点击论文的详情
   sidebarPaperId.value = paperId
+  // 移动端：自动收起侧边栏，让用户立刻看到内容
+  if (!mql.matches) showSidebar.value = false
 }
 
 async function openNoteFromSidebar(payload: { id: number; paperId: string }) {
   viewingPdf.value = null
+  comparingPaperIds.value = null
+  viewingCompareResultId.value = null
   // 如果当前正在编辑笔记，先判断是否为空
   if (editingNote.value && noteEditorRef.value) {
     const isEmpty = noteEditorRef.value.isEffectivelyEmpty()
@@ -314,6 +363,7 @@ async function openNoteFromSidebar(payload: { id: number; paperId: string }) {
       }
       editingNote.value = null
       sidebarPaperId.value = payload.paperId
+      if (!mql.matches) showSidebar.value = false
       return
     } else {
       // 当前笔记有内容：自动保存后再打开新点击笔记的详情编辑页
@@ -326,12 +376,16 @@ async function openNoteFromSidebar(payload: { id: number; paperId: string }) {
   }
 
   editingNote.value = payload
+  if (!mql.matches) showSidebar.value = false
 }
 
 function openPdfFromSidebar(payload: { paperId: string; filePath: string; title: string }) {
   editingNote.value = null
   sidebarPaperId.value = null
+  comparingPaperIds.value = null
+  viewingCompareResultId.value = null
   viewingPdf.value = payload
+  if (!mql.matches) showSidebar.value = false
 }
 
 const pdfViewerSrc = computed(() => {
@@ -393,13 +447,29 @@ function resetCards() {
   cardAnimClass.value = 'card-enter'
 }
 
-// 监听全局“回到推荐”事件
+// Sidebar toggle — default open on desktop, closed on mobile
+const mql = window.matchMedia('(min-width: 1024px)')
+const showSidebar = ref(mql.matches)
+
+function onMqlChange(e: MediaQueryListEvent) {
+  // When crossing the lg breakpoint, auto-adjust state:
+  // opening on desktop resize-up, closing on mobile resize-down
+  if (e.matches) {
+    showSidebar.value = true
+  } else {
+    showSidebar.value = false
+  }
+}
+mql.addEventListener('change', onMqlChange)
+
+// 监听全局"回到推荐"事件
 onMounted(() => {
   window.addEventListener('go-to-digest-click', handleGoToDigestClick)
 })
 
 onBeforeUnmount(() => {
   window.removeEventListener('go-to-digest-click', handleGoToDigestClick)
+  mql.removeEventListener('change', onMqlChange)
 })
 
 // 离开推荐页路由时（例如切到列表页），也应用同样的自动保存/删除规则
@@ -426,67 +496,125 @@ onBeforeRouteLeave(async (_to, _from, next) => {
 </script>
 
 <template>
-  <div class="h-full flex">
-    <template v-if="isAuthenticated">
-      <!-- Left sidebar (knowledge base) -->
-      <Sidebar
-        ref="sidebarRef"
-        :kb-tree="kbTree"
-        :compare-tree="compareTree"
-        v-model:active-folder-id="activeFolderId"
-        v-model:selected-date="selectedDate"
-        :dates="dates"
-        scope="kb"
-        @open-paper="openPaperFromSidebar"
-        @open-note="openNoteFromSidebar"
-        @open-pdf="openPdfFromSidebar"
-        @compare="handleCompare"
-        @refresh="loadKbTree"
-        @open-compare-result="openCompareResult"
-        @refresh-compare="loadCompareTree"
+  <div class="h-full flex relative">
+
+    <!-- Sidebar overlay backdrop (mobile only, when sidebar is open) -->
+    <Transition name="fade">
+      <div
+        v-if="showSidebar"
+        class="fixed inset-0 z-20 bg-black/60 lg:hidden"
+        @click="showSidebar = false"
       />
-    </template>
-    <template v-else>
-      <aside class="w-72 h-full bg-bg-sidebar border-r border-border flex flex-col shrink-0">
-        <div class="p-4 border-b border-border">
-          <div class="bg-gradient-to-r from-[#fd267a] to-[#ff6036] rounded-xl p-3 mb-3">
-            <div class="text-xs font-bold text-white/80 mb-1">论文日报</div>
-            <select
-              :value="selectedDate"
-              @change="onDateChange"
-              class="w-full bg-white/20 border-none rounded-lg px-2 py-1.5 text-white text-sm font-medium focus:outline-none cursor-pointer appearance-none"
-            >
-              <option v-for="d in dates" :key="d" :value="d" class="text-black">{{ d }}</option>
-            </select>
-          </div>
+    </Transition>
+
+    <!-- ===== Authenticated sidebar ===== -->
+    <template v-if="isAuthenticated">
+      <Transition name="sidebar-slide">
+        <div
+          v-show="showSidebar"
+          :class="[
+            'shrink-0 z-30 h-full transition-transform duration-300 ease-in-out',
+            'fixed lg:relative inset-y-0 left-0',
+            showSidebar ? 'translate-x-0' : '-translate-x-full lg:-translate-x-full'
+          ]"
+        >
+          <Sidebar
+            ref="sidebarRef"
+            :kb-tree="kbTree"
+            :compare-tree="compareTree"
+            v-model:active-folder-id="activeFolderId"
+            v-model:selected-date="selectedDate"
+            :dates="dates"
+            scope="kb"
+            @open-paper="openPaperFromSidebar"
+            @open-note="openNoteFromSidebar"
+            @open-pdf="openPdfFromSidebar"
+            @compare="handleCompare"
+            @refresh="loadKbTree"
+            @open-compare-result="openCompareResult"
+            @refresh-compare="loadCompareTree"
+            @toggle-sidebar="showSidebar = false"
+          />
         </div>
-        <div class="flex-1 p-4 flex flex-col items-center justify-center text-center">
-          <div class="w-14 h-14 rounded-xl bg-bg-elevated border border-border mb-3 flex items-center justify-center text-2xl">
-            🔒
-          </div>
-          <h3 class="text-base font-semibold text-text-primary mb-2">登录后使用知识库</h3>
-          <p class="text-xs text-text-muted mb-4 leading-relaxed">
-            收藏论文、文件夹管理、笔记与附件上传需要先登录
-          </p>
-          <button
-            class="px-4 py-2 rounded-full bg-gradient-to-r from-[#fd267a] to-[#ff6036] text-sm font-semibold text-white border-none cursor-pointer hover:opacity-90 transition-opacity"
-            @click="router.push({ path: '/login', query: { redirect: route.fullPath } })"
-          >
-            去登录
-          </button>
-        </div>
-      </aside>
+      </Transition>
     </template>
 
+    <!-- ===== Unauthenticated sidebar ===== -->
+    <template v-else>
+      <Transition name="sidebar-slide">
+        <aside
+          v-show="showSidebar"
+          :class="[
+            'z-30 w-[80vw] max-w-[320px] lg:w-72 h-full bg-bg-sidebar border-r border-border flex flex-col shrink-0 transition-transform duration-300 ease-in-out relative',
+            'fixed lg:relative inset-y-0 left-0',
+            showSidebar ? 'translate-x-0' : '-translate-x-full lg:-translate-x-full'
+          ]"
+        >
+          <!-- Collapse button (universal: mobile + desktop) -->
+          <button
+            class="absolute top-3 right-3 w-7 h-7 flex items-center justify-center rounded-full bg-bg-hover text-text-muted hover:text-text-primary hover:bg-bg-elevated border-none cursor-pointer transition-colors z-10"
+            title="收起侧边栏"
+            @click="showSidebar = false"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="15 18 9 12 15 6"/>
+            </svg>
+          </button>
+
+          <div class="p-4 border-b border-border">
+            <div class="bg-gradient-to-r from-[#fd267a] to-[#ff6036] rounded-xl p-3 mb-3">
+              <div class="text-xs font-bold text-white/80 mb-1">论文日报</div>
+              <select
+                :value="selectedDate"
+                @change="onDateChange"
+                class="w-full bg-white/20 border-none rounded-lg px-2 py-1.5 text-white text-sm font-medium focus:outline-none cursor-pointer appearance-none"
+              >
+                <option v-for="d in dates" :key="d" :value="d" class="text-black">{{ d }}</option>
+              </select>
+            </div>
+          </div>
+          <div class="flex-1 p-4 flex flex-col items-center justify-center text-center">
+            <div class="w-14 h-14 rounded-xl bg-bg-elevated border border-border mb-3 flex items-center justify-center text-2xl">
+              🔒
+            </div>
+            <h3 class="text-base font-semibold text-text-primary mb-2">登录后使用知识库</h3>
+            <p class="text-xs text-text-muted mb-4 leading-relaxed">
+              收藏论文、文件夹管理、笔记与附件上传需要先登录
+            </p>
+            <button
+              class="px-4 py-2 rounded-full bg-gradient-to-r from-[#fd267a] to-[#ff6036] text-sm font-semibold text-white border-none cursor-pointer hover:opacity-90 transition-opacity"
+              @click="router.push({ path: '/login', query: { redirect: route.fullPath } })"
+            >
+              去登录
+            </button>
+          </div>
+        </aside>
+      </Transition>
+    </template>
+
+    <!-- Universal "open sidebar" button — visible whenever sidebar is collapsed -->
+    <Transition name="fade">
+      <button
+        v-if="!showSidebar"
+        class="fixed top-1/2 -translate-y-1/2 left-0 z-10 flex items-center justify-center bg-bg-card border border-border border-l-0 rounded-r-xl w-6 h-14 text-text-muted hover:text-text-primary hover:bg-bg-hover transition-colors cursor-pointer"
+        title="展开知识库"
+        @click="showSidebar = true"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="9 18 15 12 9 6"/>
+        </svg>
+      </button>
+    </Transition>
+
     <!-- Center content area -->
-    <div class="flex-1 flex flex-col relative overflow-hidden">
-      <!-- 知识库模式：中间论文详情 + 右侧笔记编辑，等宽两栏 -->
+    <div class="flex-1 flex flex-col relative overflow-hidden min-w-0">
+      <!-- 知识库模式：中间论文详情 + 右侧笔记编辑，等宽两栏（大屏）/ 上下两栏（小屏） -->
       <div
         v-if="editingNote !== null"
-        class="flex flex-1 overflow-hidden border-l border-border mt-3"
+        class="flex flex-col lg:flex-row flex-1 overflow-hidden border-l border-border mt-3"
       >
         <!-- 中间：论文详情 -->
-        <div class="w-1/2 h-full overflow-hidden border-r border-border bg-bg">
+        <div class="h-1/2 lg:h-full lg:w-1/2 overflow-hidden border-b lg:border-b-0 lg:border-r border-border bg-bg">
           <PaperDetail
             :key="editingNote.paperId"
             :id="editingNote.paperId"
@@ -495,7 +623,7 @@ onBeforeRouteLeave(async (_to, _from, next) => {
         </div>
 
         <!-- 右侧：笔记编辑 -->
-        <div class="w-1/2 h-full overflow-hidden bg-bg">
+        <div class="h-1/2 lg:h-full lg:w-1/2 overflow-hidden bg-bg">
           <NoteEditor
             ref="noteEditorRef"
             :key="editingNote.id"
@@ -536,7 +664,7 @@ onBeforeRouteLeave(async (_to, _from, next) => {
       <!-- 仅从知识库点击 PDF 时：中间区域内嵌 PDF 阅读器 -->
       <div
         v-else-if="viewingPdf"
-        class="flex-1 flex flex-col overflow-hidden mt-3 px-4 pb-4"
+        class="flex-1 flex flex-col overflow-hidden mt-3 px-2 sm:px-4 pb-4"
       >
         <div class="shrink-0 flex items-center justify-between rounded-t-xl border border-border border-b-0 bg-bg-card px-4 py-2">
           <div class="text-sm text-text-secondary truncate pr-4">
@@ -586,22 +714,35 @@ onBeforeRouteLeave(async (_to, _from, next) => {
           <span class="text-tinder-pink text-lg">{{ error }}</span>
           <button
             class="px-4 py-2 rounded-full bg-tinder-pink text-white text-sm font-medium cursor-pointer border-none hover:opacity-90 transition-opacity"
-            @click="selectedDate && (loading = true)"
+            @click="retryLoad"
           >
             重试
           </button>
         </div>
 
         <!-- 超限提示（不显示卡片，显示背景文字） -->
-        <div v-else-if="isQuotaExceeded && quotaExceededMessage" class="flex flex-col items-center justify-center gap-4 text-center px-8">
+        <div v-else-if="isQuotaExceeded && isActuallyLimited && quotaExceededMessage" class="flex flex-col items-center justify-center gap-4 text-center px-8">
           <div class="text-5xl mb-2">🔒</div>
           <h2 class="text-xl font-bold text-text-primary">查看限制</h2>
           <p class="text-base text-text-secondary max-w-md">
             {{ quotaExceededMessage }}
           </p>
-          <p class="text-sm text-text-muted mt-2">
-            升级账号可查看更多论文
-          </p>
+          <!-- 未登录用户：提示登录以继续 -->
+          <template v-if="!isAuthenticated">
+            <p class="text-sm text-text-muted">登录后即可继续浏览更多论文</p>
+            <button
+              class="mt-2 px-6 py-2.5 rounded-full bg-gradient-to-r from-[#fd267a] to-[#ff6036] text-white text-sm font-semibold border-none cursor-pointer hover:opacity-90 transition-opacity"
+              @click="router.push({ path: '/login', query: { redirect: route.fullPath } })"
+            >
+              立即登录
+            </button>
+          </template>
+          <!-- 已登录用户：提示升级 -->
+          <template v-else>
+            <p class="text-sm text-text-muted mt-2">
+              升级账号可查看更多论文
+            </p>
+          </template>
         </div>
 
         <!-- All swiped -->
@@ -626,8 +767,8 @@ onBeforeRouteLeave(async (_to, _from, next) => {
             {{ currentIndex + 1 }} / {{ papers.length }}
           </div>
 
-          <!-- The card -->
-          <div class="w-[400px] h-[620px] mx-auto">
+          <!-- The card — responsive width/height -->
+          <div class="w-full max-w-[400px] px-3 sm:px-0 mx-auto" style="height: clamp(480px, calc(100dvh - 210px), 620px)">
             <PaperCard
               :key="currentPaper.paper_id"
               :paper="currentPaper"
@@ -654,3 +795,26 @@ onBeforeRouteLeave(async (_to, _from, next) => {
 
   </div>
 </template>
+
+<style scoped>
+/* Sidebar slide transition */
+.sidebar-slide-enter-active,
+.sidebar-slide-leave-active {
+  transition: transform 0.3s ease, opacity 0.3s ease;
+}
+.sidebar-slide-enter-from,
+.sidebar-slide-leave-to {
+  transform: translateX(-100%);
+  opacity: 0;
+}
+
+/* Fade transition for backdrop and open button */
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+</style>

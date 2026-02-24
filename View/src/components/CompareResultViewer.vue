@@ -132,35 +132,35 @@ watch(() => props.resultId, loadResult)
 .compare-markdown :deep(h1) {
   font-size: 1.25rem;
   font-weight: 700;
-  color: var(--color-text-primary, #e8e6e3);
+  color: var(--color-text-primary);
   margin-top: 1.5rem;
   margin-bottom: 0.75rem;
   padding-bottom: 0.5rem;
-  border-bottom: 1px solid var(--color-border, #2a2a2a);
+  border-bottom: 1px solid var(--color-border);
 }
 .compare-markdown :deep(h2) {
   font-size: 1.1rem;
   font-weight: 700;
-  color: var(--color-text-primary, #e8e6e3);
+  color: var(--color-text-primary);
   margin-top: 1.5rem;
   margin-bottom: 0.5rem;
 }
 .compare-markdown :deep(h3) {
   font-size: 1rem;
   font-weight: 600;
-  color: var(--color-text-primary, #e8e6e3);
+  color: var(--color-text-primary);
   margin-top: 1.25rem;
   margin-bottom: 0.5rem;
 }
 .compare-markdown :deep(p) {
-  color: var(--color-text-secondary, #b0ada8);
+  color: var(--color-text-secondary);
   line-height: 1.7;
   margin-bottom: 0.75rem;
   font-size: 0.875rem;
 }
 .compare-markdown :deep(ul),
 .compare-markdown :deep(ol) {
-  color: var(--color-text-secondary, #b0ada8);
+  color: var(--color-text-secondary);
   padding-left: 1.5rem;
   margin-bottom: 0.75rem;
   font-size: 0.875rem;
@@ -176,42 +176,42 @@ watch(() => props.resultId, loadResult)
   font-size: 0.8125rem;
 }
 .compare-markdown :deep(th) {
-  background: var(--color-bg-elevated, #1e1e1e);
-  color: var(--color-text-primary, #e8e6e3);
+  background: var(--color-bg-elevated);
+  color: var(--color-text-primary);
   padding: 0.5rem 0.75rem;
   text-align: left;
   font-weight: 600;
-  border: 1px solid var(--color-border, #2a2a2a);
+  border: 1px solid var(--color-border);
 }
 .compare-markdown :deep(td) {
   padding: 0.5rem 0.75rem;
-  border: 1px solid var(--color-border, #2a2a2a);
-  color: var(--color-text-secondary, #b0ada8);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
 }
 .compare-markdown :deep(tr:nth-child(even)) {
-  background: var(--color-bg-elevated, #1e1e1e);
+  background: var(--color-bg-elevated);
 }
 .compare-markdown :deep(strong) {
-  color: var(--color-text-primary, #e8e6e3);
+  color: var(--color-text-primary);
   font-weight: 600;
 }
 .compare-markdown :deep(code) {
-  background: var(--color-bg-elevated, #1e1e1e);
+  background: var(--color-bg-elevated);
   padding: 0.15rem 0.4rem;
   border-radius: 0.25rem;
   font-size: 0.8125rem;
-  color: #c084fc;
+  color: var(--color-tinder-purple);
 }
 .compare-markdown :deep(blockquote) {
-  border-left: 3px solid #8b5cf6;
+  border-left: 3px solid var(--color-tinder-purple);
   padding-left: 1rem;
-  color: var(--color-text-muted, #7a7a7a);
+  color: var(--color-text-muted);
   font-style: italic;
   margin: 0.75rem 0;
 }
 .compare-markdown :deep(hr) {
   border: none;
-  border-top: 1px solid var(--color-border, #2a2a2a);
+  border-top: 1px solid var(--color-border);
   margin: 1.25rem 0;
 }
 </style>

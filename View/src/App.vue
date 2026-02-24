@@ -39,9 +39,9 @@ onBeforeUnmount(() => {
     <!-- Main content -->
     <main class="flex-1 overflow-hidden relative">
       <router-view />
-      <!-- 全局“回到推荐”按钮 -->
+      <!-- 全局"回到推荐"按钮 -->
       <button
-        class="fixed bottom-8 right-8 z-50 px-4 py-2 rounded-full bg-gradient-to-r from-[#fd267a] to-[#ff6036] text-sm font-semibold text-white shadow-lg border-none cursor-pointer hover:opacity-90 transition-opacity"
+        class="fixed bottom-4 right-4 sm:bottom-8 sm:right-8 z-50 px-3 py-1.5 sm:px-4 sm:py-2 rounded-full bg-gradient-to-r from-[#fd267a] to-[#ff6036] text-xs sm:text-sm font-semibold text-white shadow-lg border-none cursor-pointer hover:opacity-90 transition-opacity"
         @click="goToDigest"
       >
         回到推荐

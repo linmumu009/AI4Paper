@@ -9,3 +9,6 @@ reportlab>=4.2.0,<5.0.0
 pypdf>=5.0.0,<6.0.0
 fastapi>=0.115.0
 uvicorn[standard]>=0.32.0
+alibabacloud_dypnsapi20170525>=1.0.0
+alibabacloud_tea_util>=0.3.0
+alibabacloud_tea_openapi>=0.3.0

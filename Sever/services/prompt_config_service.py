@@ -50,6 +50,86 @@ def init_db() -> None:
         conn.close()
 
 
+def seed_default_idea_prompts() -> int:
+    """Seed the prompt_config table with the default idea_generate prompts from config.py.
+
+    Each prompt is inserted only if no existing row has the same ``name``.
+    Also writes the prompt texts to config.json (via config_service) so that
+    the admin UI ``detectPromptSelections`` can find a match immediately.
+
+    Returns the number of newly inserted rows.
+    """
+    import sys
+    import os as _os
+    _base = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
+    if _base not in sys.path:
+        sys.path.insert(0, _base)
+
+    try:
+        import config.config as _cfg
+    except ImportError:
+        return 0
+
+    # (name, remark, config_var_name)
+    _SEED_DEFS = [
+        ("灵感原子抽取提示词 [默认]",       "原子抽取阶段 (idea_ingest)",         "idea_ingest_system_prompt"),
+        ("研究问题生成提示词 [默认]",         "问题生成阶段 (idea_combine question)", "idea_question_system_prompt"),
+        ("灵感候选生成提示词 [默认]",         "候选生成阶段 (idea_combine candidate)","idea_candidate_system_prompt"),
+        ("灵感评审提示词 [默认]",             "评审阶段 (idea_review review)",        "idea_review_system_prompt"),
+        ("灵感修订提示词 [默认]",             "修订阶段 (idea_review revise)",        "idea_revise_system_prompt"),
+        ("实验计划生成提示词 [默认]",         "计划生成阶段 (idea_plan)",             "idea_plan_system_prompt"),
+        ("评测回放提示词 [默认]",             "评测回放阶段 (idea_eval)",             "idea_eval_system_prompt"),
+    ]
+
+    now = _now_iso()
+    conn = _connect()
+    inserted = 0
+    config_updates: Dict[str, Any] = {}
+
+    try:
+        for name, remark, var_name in _SEED_DEFS:
+            content = (getattr(_cfg, var_name, "") or "").strip()
+            if not content:
+                continue  # no default defined yet
+
+            # Insert only if this name does not already exist
+            exists = conn.execute(
+                "SELECT id FROM prompt_config WHERE name = ?", (name,)
+            ).fetchone()
+            if not exists:
+                conn.execute(
+                    "INSERT INTO prompt_config (name, remark, prompt_content, created_at, updated_at) "
+                    "VALUES (?, ?, ?, ?, ?)",
+                    (name, remark, content, now, now),
+                )
+                inserted += 1
+
+            # Always ensure config.json carries the default so the admin UI
+            # detectPromptSelections() can match it (writes only if unset).
+            from services import config_service as _cs
+            current = _cs.get_config_with_groups()
+            all_vals: Dict[str, Any] = {}
+            for g in current.get("groups", []):
+                for item in g.get("items", []):
+                    all_vals[item["key"]] = item["value"]
+
+            if not (all_vals.get(var_name) or "").strip():
+                config_updates[var_name] = content
+
+        conn.commit()
+    finally:
+        conn.close()
+
+    if config_updates:
+        try:
+            from services import config_service as _cs
+            _cs.update_config(config_updates)
+        except Exception as e:
+            print(f"[WARN] seed_default_idea_prompts: failed to write config updates: {e}")
+
+    return inserted
+
+
 def list_configs() -> List[Dict[str, Any]]:
     """获取所有提示词配置列表。"""
     conn = _connect()

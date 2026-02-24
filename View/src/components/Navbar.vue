@@ -3,6 +3,7 @@ import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute } from 'vue-router'
 import { useRouter } from 'vue-router'
 import { currentUser, ensureAuthInitialized, isAdmin, isAuthenticated, logout } from '../stores/auth'
+import { isDark, toggleTheme } from '../stores/theme'
 
 const route = useRoute()
 const router = useRouter()
@@ -58,10 +59,10 @@ async function doLogout() {
 </script>
 
 <template>
-  <nav class="h-14 flex items-center justify-between px-5 bg-bg-sidebar border-b border-border">
+  <nav class="h-12 sm:h-14 flex items-center justify-between px-3 sm:px-5 bg-bg-sidebar border-b border-border">
     <!-- Logo -->
-    <router-link to="/" class="flex items-center gap-2 no-underline">
-      <span class="text-xl gradient-text font-bold tracking-tight">AI4Papers</span>
+    <router-link to="/" class="flex items-center gap-2 no-underline shrink-0">
+      <span class="text-lg sm:text-xl gradient-text font-bold tracking-tight">AI4Papers</span>
     </router-link>
 
     <!-- Center nav icons -->
@@ -71,8 +72,8 @@ async function doLogout() {
         :key="item.to"
         :to="item.to"
         :title="item.label"
-        class="w-10 h-10 flex items-center justify-center rounded-full no-underline text-lg transition-all duration-200"
-        :class="route.path === item.to
+        class="w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center rounded-full no-underline text-base sm:text-lg transition-all duration-200"
+        :class="(item.to === '/' ? route.path === '/' : route.path.startsWith(item.to))
           ? 'bg-bg-elevated text-text-primary scale-110'
           : 'text-text-muted hover:text-text-secondary hover:bg-bg-hover'"
       >
@@ -81,7 +82,37 @@ async function doLogout() {
     </div>
 
     <!-- Right auth area -->
-    <div class="w-56 flex items-center justify-end gap-2">
+    <div class="flex items-center justify-end gap-2 shrink-0">
+      <!-- Workbench entry button -->
+      <router-link
+        to="/workbench"
+        title="工作台"
+        class="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center rounded-full transition-all duration-200 no-underline"
+        :class="route.path.startsWith('/workbench') || route.path.startsWith('/idea')
+          ? 'bg-bg-elevated text-text-primary scale-110'
+          : 'text-text-muted hover:text-text-secondary hover:bg-bg-hover'"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 sm:w-[18px] sm:h-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="2" y="3" width="20" height="14" rx="2"/><polyline points="8 21 12 17 16 21"/>
+        </svg>
+      </router-link>
+
+      <!-- Theme toggle -->
+      <button
+        class="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center rounded-full text-text-muted hover:text-text-primary hover:bg-bg-hover transition-all duration-200 cursor-pointer bg-transparent border-none"
+        :title="isDark ? '切换到日间模式' : '切换到夜间模式'"
+        @click="toggleTheme"
+      >
+        <!-- Sun icon (shown in dark mode → click to go light) -->
+        <svg v-if="isDark" xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 sm:w-[18px] sm:h-[18px] transition-transform duration-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="5" /><line x1="12" y1="1" x2="12" y2="3" /><line x1="12" y1="21" x2="12" y2="23" /><line x1="4.22" y1="4.22" x2="5.64" y2="5.64" /><line x1="18.36" y1="18.36" x2="19.78" y2="19.78" /><line x1="1" y1="12" x2="3" y2="12" /><line x1="21" y1="12" x2="23" y2="12" /><line x1="4.22" y1="19.78" x2="5.64" y2="18.36" /><line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+        </svg>
+        <!-- Moon icon (shown in light mode → click to go dark) -->
+        <svg v-else xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 sm:w-[18px] sm:h-[18px] transition-transform duration-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+        </svg>
+      </button>
+
       <template v-if="isAuthenticated">
         <!-- User dropdown -->
         <div ref="dropdownRef" class="relative">
@@ -92,7 +123,7 @@ async function doLogout() {
             <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" />
             </svg>
-            <span class="truncate max-w-20">{{ currentUser?.username }}</span>
+            <span class="truncate max-w-[4rem] hidden sm:inline">{{ currentUser?.username }}</span>
             <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 transition-transform" :class="showDropdown ? 'rotate-180' : ''" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <polyline points="6 9 12 15 18 9" />
             </svg>

@@ -21,6 +21,7 @@ import {
   updatePromptConfig,
   deletePromptConfig,
   applyPromptConfig,
+  batchApplyConfigs,
 } from '../api'
 import type {
   AuthUser,
@@ -37,10 +38,11 @@ import { isSuperAdmin, currentUser } from '../stores/auth'
 // ---------------------------------------------------------------------------
 // Sidebar menu state
 // ---------------------------------------------------------------------------
-const activeTab = ref<'users' | 'roles' | 'pipeline' | 'schedule' | 'config' | 'llm-config' | 'prompt-config'>('users')
+const activeTab = ref<'users' | 'roles' | 'pipeline' | 'schedule' | 'paper-recommend-config' | 'idea-generate-config' | 'llm-config' | 'prompt-config'>('users')
+const showAdminSidebar = ref(false)
 
 const menuItems = computed(() => {
-  const items: { key: 'users' | 'roles' | 'pipeline' | 'schedule' | 'config' | 'llm-config' | 'prompt-config'; icon: string; label: string; desc: string; group?: string }[] = [
+  const items: { key: 'users' | 'roles' | 'pipeline' | 'schedule' | 'paper-recommend-config' | 'idea-generate-config' | 'llm-config' | 'prompt-config'; icon: string; label: string; desc: string; group?: string }[] = [
     { key: 'users', icon: '👥', label: '用户等级', desc: '管理用户访问等级', group: '用户' },
   ]
   if (isSuperAdmin.value) {
@@ -49,9 +51,10 @@ const menuItems = computed(() => {
   items.push(
     { key: 'pipeline', icon: '🚀', label: '脚本执行', desc: '手动运行 Pipeline', group: '运维' },
     { key: 'schedule', icon: '🕐', label: '定时调度', desc: '自动定时执行配置', group: '运维' },
-    { key: 'config', icon: '⚙️', label: '系统配置', desc: '管理系统配置项', group: '系统' },
-    { key: 'llm-config', icon: '🤖', label: '模型配置', desc: '管理大模型配置', group: '系统' },
-    { key: 'prompt-config', icon: '📝', label: '提示词配置', desc: '管理提示词配置', group: '系统' },
+    { key: 'paper-recommend-config', icon: '⭐', label: '论文推荐配置', desc: '论文推荐功能模型与提示词配置', group: '系统配置' },
+    { key: 'idea-generate-config', icon: '💡', label: '灵感生成配置', desc: '灵感生成功能模型与提示词配置', group: '系统配置' },
+    { key: 'llm-config', icon: '🤖', label: '模型配置库', desc: '管理大模型配置', group: '配置库' },
+    { key: 'prompt-config', icon: '📝', label: '提示词库', desc: '管理提示词配置', group: '配置库' },
   )
   return items
 })
@@ -164,12 +167,15 @@ const pipelineStatus = ref<PipelineRunStatus | null>(null)
 const pipelineLoading = ref(false)
 const pipelineError = ref('')
 const pollTimer = ref<ReturnType<typeof setInterval> | null>(null)
+// Track the current run_id so the UI always shows the right run after a refresh
+const trackedRunId = ref<string | null>(null)
 
 // Run form
 const runDate = ref(new Date().toISOString().slice(0, 10))
 const runPipelineName = ref('default')
 const runSllm = ref<number | null>(null)
 const runZo = ref('F')
+const runForce = ref(false)
 // Arxiv 检索参数
 const runDays = ref<number | null>(null)
 const runCategories = ref('')
@@ -186,6 +192,7 @@ const schedule = ref<ScheduleConfig>({
   pipeline: 'daily',
   sllm: null,
   zo: 'F',
+  user_id: null,
 })
 const scheduleLoading = ref(false)
 const scheduleSaving = ref(false)
@@ -194,7 +201,12 @@ const logsContainer = ref<HTMLElement | null>(null)
 
 async function loadPipelineStatus() {
   try {
-    pipelineStatus.value = await getPipelineRunStatus()
+    const status = await getPipelineRunStatus()
+    pipelineStatus.value = status
+    // Track which run we are watching so we can highlight a new run
+    if (status.run_id) {
+      trackedRunId.value = status.run_id
+    }
   } catch (e: any) {
     // silently ignore polling errors
   }
@@ -221,6 +233,7 @@ async function handleRunPipeline() {
       date: runDate.value,
       sllm: runSllm.value,
       zo: runZo.value,
+      force: runForce.value,
       days: runDays.value || null,
       categories: runCategories.value.trim() || null,
       extra_query: runQuery.value.trim() || null,
@@ -255,6 +268,7 @@ async function handleSaveSchedule() {
       pipeline: schedule.value.pipeline,
       sllm: schedule.value.sllm,
       zo: schedule.value.zo,
+      user_id: schedule.value.user_id ?? null,
     })
     schedule.value = res.schedule
   } catch (e: any) {
@@ -352,7 +366,8 @@ async function loadSystemConfig() {
 // ---------------------------------------------------------------------------
 
 // Module-based config structure: each module groups its LLM + prompts together
-const configModules = [
+// ── 论文推荐 功能模块 ──────────────────────────────────────────────
+const recommendConfigModules = [
   {
     key: 'theme_select',
     label: '主题相关性评分',
@@ -421,6 +436,83 @@ const configModules = [
   },
 ]
 
+// ── 灵感生成 功能模块 ──────────────────────────────────────────────
+const ideaConfigModules = [
+  {
+    key: 'idea_ingest',
+    label: '原子抽取 (idea_ingest)',
+    icon: '⚗️',
+    desc: '从论文全文抽取结构化灵感原子',
+    llmPrefix: 'idea_ingest' as string | null,
+    prompts: [
+      { variable: 'idea_ingest_system_prompt', label: '原子抽取提示词' },
+    ],
+  },
+  {
+    key: 'idea_question',
+    label: '研究问题生成 (idea_question)',
+    icon: '❓',
+    desc: '从局限性原子挖掘有价值的研究问题',
+    llmPrefix: 'idea_question' as string | null,
+    prompts: [
+      { variable: 'idea_question_system_prompt', label: '研究问题生成提示词' },
+    ],
+  },
+  {
+    key: 'idea_candidate',
+    label: '灵感候选生成 (idea_candidate)',
+    icon: '💡',
+    desc: '基于研究问题与原子生成多策略灵感候选',
+    llmPrefix: 'idea_candidate' as string | null,
+    prompts: [
+      { variable: 'idea_candidate_system_prompt', label: '灵感候选生成提示词' },
+    ],
+  },
+  {
+    key: 'idea_review',
+    label: '灵感评审 (idea_review)',
+    icon: '🔍',
+    desc: '多视角评委对灵感候选进行评审打分',
+    llmPrefix: 'idea_review' as string | null,
+    prompts: [
+      { variable: 'idea_review_system_prompt', label: '灵感评审提示词' },
+    ],
+  },
+  {
+    key: 'idea_revise',
+    label: '灵感修订 (idea_revise)',
+    icon: '✏️',
+    desc: '根据评审反馈自动修订灵感候选',
+    llmPrefix: 'idea_revise' as string | null,
+    prompts: [
+      { variable: 'idea_revise_system_prompt', label: '灵感修订提示词' },
+    ],
+  },
+  {
+    key: 'idea_plan',
+    label: '实验计划生成 (idea_plan)',
+    icon: '📋',
+    desc: '为通过评审的灵感生成可执行实验计划',
+    llmPrefix: 'idea_plan' as string | null,
+    prompts: [
+      { variable: 'idea_plan_system_prompt', label: '实验计划生成提示词' },
+    ],
+  },
+  {
+    key: 'idea_eval',
+    label: '评测回放 (idea_eval)',
+    icon: '🔁',
+    desc: '对问题集重新生成灵感用于历史版本对比',
+    llmPrefix: 'idea_eval' as string | null,
+    prompts: [
+      { variable: 'idea_eval_system_prompt', label: '评测回放提示词' },
+    ],
+  },
+]
+
+// 合并供 detect 函数使用
+const configModules = [...recommendConfigModules, ...ideaConfigModules]
+
 // Per-prefix selected LLM config IDs
 const selectedLlmConfigIds = ref<Record<string, number | null>>({
   theme_select: null,
@@ -428,6 +520,13 @@ const selectedLlmConfigIds = ref<Record<string, number | null>>({
   summary: null,
   summary_limit: null,
   summary_batch: null,
+  idea_ingest: null,
+  idea_question: null,
+  idea_candidate: null,
+  idea_review: null,
+  idea_revise: null,
+  idea_plan: null,
+  idea_eval: null,
 })
 
 // Per-variable selected prompt config IDs
@@ -444,6 +543,13 @@ const selectedPromptConfigIds = ref<Record<string, number | null>>({
   summary_batch_system_prompt: null,
   pdf_info_system_prompt: null,
   paper_assets_system_prompt: null,
+  idea_ingest_system_prompt: null,
+  idea_question_system_prompt: null,
+  idea_candidate_system_prompt: null,
+  idea_review_system_prompt: null,
+  idea_revise_system_prompt: null,
+  idea_plan_system_prompt: null,
+  idea_eval_system_prompt: null,
 })
 
 // Word limit values (editable)
@@ -478,6 +584,13 @@ const prefixModelKey: Record<string, string> = {
   summary: 'summary_model',
   summary_limit: 'summary_limit_model',
   summary_batch: 'summary_batch_model',
+  idea_ingest:     'idea_ingest_model',
+  idea_question:   'idea_question_model',
+  idea_candidate:  'idea_candidate_model',
+  idea_review:     'idea_review_model',
+  idea_revise:     'idea_revise_model',
+  idea_plan:       'idea_plan_model',
+  idea_eval:       'idea_eval_model',
 }
 const prefixBaseUrlKey: Record<string, string> = {
   theme_select: 'theme_select_base_url',
@@ -485,12 +598,134 @@ const prefixBaseUrlKey: Record<string, string> = {
   summary: 'summary_base_url',
   summary_limit: 'summary_limit_base_url',
   summary_batch: 'summary_batch_base_url',
+  idea_ingest:     'idea_ingest_base_url',
+  idea_question:   'idea_question_base_url',
+  idea_candidate:  'idea_candidate_base_url',
+  idea_review:     'idea_review_base_url',
+  idea_revise:     'idea_revise_base_url',
+  idea_plan:       'idea_plan_base_url',
+  idea_eval:       'idea_eval_base_url',
 }
 
 const applyingModelPrefix = ref<string | null>(null)
 const applyingPromptVariable = ref<string | null>(null)
 const savingWordLimits = ref(false)
 const sysConfigSuccessMsg = ref('')
+
+// ---------------------------------------------------------------------------
+// Batch save state: track original selections to detect dirty items
+// ---------------------------------------------------------------------------
+
+// Snapshot of LLM/prompt selection at the time the page was last loaded/saved
+const originalLlmConfigIds = ref<Record<string, number | null>>({})
+const originalPromptConfigIds = ref<Record<string, number | null>>({})
+
+// Global quick-fill: one LLM or prompt applied to all modules at once
+const quickFillLlmId = ref<number | null>(null)
+const quickFillPromptId = ref<number | null>(null)
+
+// Batch saving state
+const batchSaving = ref(false)
+const batchSaveScope = ref<'recommend' | 'idea' | null>(null)
+
+// How many items changed (per scope)
+const recommendDirtyCount = computed(() => {
+  let count = 0
+  for (const mod of recommendConfigModules) {
+    if (mod.llmPrefix) {
+      if (selectedLlmConfigIds.value[mod.llmPrefix] !== originalLlmConfigIds.value[mod.llmPrefix]) count++
+    }
+    for (const p of mod.prompts) {
+      if (selectedPromptConfigIds.value[p.variable] !== originalPromptConfigIds.value[p.variable]) count++
+    }
+  }
+  return count
+})
+
+const ideaDirtyCount = computed(() => {
+  let count = 0
+  for (const mod of ideaConfigModules) {
+    if (mod.llmPrefix) {
+      if (selectedLlmConfigIds.value[mod.llmPrefix] !== originalLlmConfigIds.value[mod.llmPrefix]) count++
+    }
+    for (const p of mod.prompts) {
+      if (selectedPromptConfigIds.value[p.variable] !== originalPromptConfigIds.value[p.variable]) count++
+    }
+  }
+  return count
+})
+
+function snapshotSelections() {
+  originalLlmConfigIds.value = { ...selectedLlmConfigIds.value }
+  originalPromptConfigIds.value = { ...selectedPromptConfigIds.value }
+}
+
+function applyQuickFillLlm(scope: 'recommend' | 'idea') {
+  if (!quickFillLlmId.value) return
+  const modules = scope === 'recommend' ? recommendConfigModules : ideaConfigModules
+  for (const mod of modules) {
+    if (mod.llmPrefix) {
+      selectedLlmConfigIds.value[mod.llmPrefix] = quickFillLlmId.value
+    }
+  }
+}
+
+function applyQuickFillPrompt(scope: 'recommend' | 'idea') {
+  if (!quickFillPromptId.value) return
+  const modules = scope === 'recommend' ? recommendConfigModules : ideaConfigModules
+  for (const mod of modules) {
+    for (const p of mod.prompts) {
+      selectedPromptConfigIds.value[p.variable] = quickFillPromptId.value
+    }
+  }
+}
+
+async function handleBatchSave(scope: 'recommend' | 'idea') {
+  const modules = scope === 'recommend' ? recommendConfigModules : ideaConfigModules
+  const llmApplies: { config_id: number; prefix: string }[] = []
+  const promptApplies: { config_id: number; variable: string }[] = []
+
+  for (const mod of modules) {
+    if (mod.llmPrefix) {
+      const id = selectedLlmConfigIds.value[mod.llmPrefix]
+      const origId = originalLlmConfigIds.value[mod.llmPrefix]
+      if (id && id !== origId) {
+        llmApplies.push({ config_id: id, prefix: mod.llmPrefix })
+      }
+    }
+    for (const p of mod.prompts) {
+      const id = selectedPromptConfigIds.value[p.variable]
+      const origId = originalPromptConfigIds.value[p.variable]
+      if (id && id !== origId) {
+        promptApplies.push({ config_id: id, variable: p.variable })
+      }
+    }
+  }
+
+  if (llmApplies.length === 0 && promptApplies.length === 0) {
+    sysConfigSuccessMsg.value = '没有需要保存的更改'
+    setTimeout(() => { sysConfigSuccessMsg.value = '' }, 2500)
+    return
+  }
+
+  batchSaving.value = true
+  batchSaveScope.value = scope
+  try {
+    const res = await batchApplyConfigs(llmApplies, promptApplies)
+    await loadSystemConfig()
+    detectLlmSelections()
+    detectPromptSelections()
+    snapshotSelections()
+    const errMsg = res.errors?.length ? `（${res.errors.length} 项有误）` : ''
+    sysConfigSuccessMsg.value = `✓ 已保存 ${res.applied_count} 项配置${errMsg}`
+    setTimeout(() => { sysConfigSuccessMsg.value = '' }, 3000)
+  } catch (e: any) {
+    window.alert(e?.response?.data?.detail || '保存失败')
+  } finally {
+    batchSaving.value = false
+    batchSaveScope.value = null
+  }
+}
 
 function detectLlmSelections() {
   for (const mod of configModules) {
@@ -601,9 +836,9 @@ async function handleSaveWordLimits() {
   }
 }
 
-// Watch activeTab to load config when switching to config tab
+// Watch activeTab to load config when switching to config tabs
 watch(activeTab, async (newTab) => {
-  if (newTab === 'config') {
+  if (newTab === 'paper-recommend-config' || newTab === 'idea-generate-config') {
     const promises: Promise<void>[] = []
     if (configGroups.value.length === 0) promises.push(loadSystemConfig())
     if (llmConfigs.value.length === 0) promises.push(loadLlmConfigs())
@@ -611,6 +846,7 @@ watch(activeTab, async (newTab) => {
     if (promises.length > 0) await Promise.all(promises)
     detectLlmSelections()
     detectPromptSelections()
+    snapshotSelections()
     initWordLimits()
     initMineruToken()
   } else if (newTab === 'llm-config' && llmConfigs.value.length === 0) {
@@ -637,6 +873,14 @@ const usagePrefixOptions = [
   { value: 'summary', label: '摘要生成 (summary)' },
   { value: 'summary_limit', label: '摘要精简 (summary_limit)' },
   { value: 'summary_batch', label: '批量摘要 (summary_batch)' },
+  { value: 'idea_generate',   label: '灵感生成·全局兜底 (idea_generate)' },
+  { value: 'idea_ingest',    label: '灵感·原子抽取 (idea_ingest)' },
+  { value: 'idea_question',  label: '灵感·研究问题生成 (idea_question)' },
+  { value: 'idea_candidate', label: '灵感·候选生成 (idea_candidate)' },
+  { value: 'idea_review',    label: '灵感·评审 (idea_review)' },
+  { value: 'idea_revise',    label: '灵感·修订 (idea_revise)' },
+  { value: 'idea_plan',      label: '灵感·实验计划 (idea_plan)' },
+  { value: 'idea_eval',      label: '灵感·评测回放 (idea_eval)' },
 ]
 
 async function loadLlmConfigs() {
@@ -837,11 +1081,41 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="h-full flex overflow-hidden">
+  <div class="h-full flex overflow-hidden relative">
+
+    <!-- Mobile sidebar overlay backdrop -->
+    <div
+      v-if="showAdminSidebar"
+      class="fixed inset-0 z-20 bg-black/60 md:hidden"
+      @click="showAdminSidebar = false"
+    />
+
+    <!-- Mobile admin nav toggle button -->
+    <button
+      v-if="!showAdminSidebar"
+      class="absolute top-2 left-2 z-10 md:hidden w-8 h-8 flex items-center justify-center rounded-full bg-bg-card border border-border text-text-secondary hover:bg-bg-hover transition-colors"
+      title="后台管理导航"
+      @click="showAdminSidebar = true"
+    >
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+    </button>
+
     <!-- ============================== -->
     <!-- Sidebar -->
     <!-- ============================== -->
-    <aside class="w-56 h-full bg-bg-sidebar border-r border-border flex flex-col shrink-0">
+    <aside
+      :class="[
+        'z-30 md:z-auto w-56 h-full bg-bg-sidebar border-r border-border flex flex-col shrink-0 transition-transform duration-300',
+        showAdminSidebar
+          ? 'fixed md:relative inset-y-0 left-0 translate-x-0'
+          : 'fixed md:relative inset-y-0 left-0 -translate-x-full md:translate-x-0'
+      ]"
+    >
+      <!-- Mobile close button -->
+      <button
+        class="md:hidden absolute top-3 right-3 w-7 h-7 flex items-center justify-center rounded-full bg-bg-hover text-text-muted hover:text-text-primary border-none cursor-pointer"
+        @click="showAdminSidebar = false"
+      >✕</button>
       <!-- Sidebar header -->
       <div class="px-4 pt-5 pb-3 border-b border-border">
         <h2 class="text-base font-bold text-text-primary tracking-tight">⚙ 后台管理</h2>
@@ -862,7 +1136,7 @@ onUnmounted(() => {
               :class="activeTab === item.key
                 ? 'bg-bg-elevated shadow-sm'
                 : 'hover:bg-bg-hover'"
-              @click="activeTab = item.key"
+              @click="activeTab = item.key; showAdminSidebar = false"
             >
               <span class="text-lg leading-none mt-0.5 shrink-0">{{ item.icon }}</span>
               <div class="min-w-0">
@@ -900,12 +1174,12 @@ onUnmounted(() => {
     <!-- ============================== -->
     <!-- Main content area -->
     <!-- ============================== -->
-    <div class="flex-1 flex flex-col overflow-hidden">
+    <div class="flex-1 flex flex-col overflow-hidden min-w-0">
 
       <!-- ============================================================= -->
       <!-- Page: User Tier Management -->
       <!-- ============================================================= -->
-      <div v-if="activeTab === 'users'" class="flex-1 flex flex-col p-6 overflow-hidden">
+      <div v-if="activeTab === 'users'" class="flex-1 flex flex-col p-3 sm:p-6 overflow-hidden">
         <div class="flex items-center justify-between mb-4 shrink-0">
           <div>
             <h1 class="text-lg font-bold text-text-primary">👥 用户等级</h1>
@@ -989,7 +1263,7 @@ onUnmounted(() => {
       <!-- ============================================================= -->
       <!-- Page: Role / Permission Management (superadmin only) -->
       <!-- ============================================================= -->
-      <div v-if="activeTab === 'roles'" class="flex-1 flex flex-col p-6 overflow-hidden">
+      <div v-if="activeTab === 'roles'" class="flex-1 flex flex-col p-3 sm:p-6 overflow-hidden">
         <div class="flex items-center justify-between mb-4 shrink-0">
           <div>
             <h1 class="text-lg font-bold text-text-primary">🛡️ 权限管理</h1>
@@ -1102,7 +1376,7 @@ onUnmounted(() => {
       <!-- ============================================================= -->
       <!-- Page: Pipeline Execution -->
       <!-- ============================================================= -->
-      <div v-if="activeTab === 'pipeline'" class="flex-1 flex flex-col p-6 gap-4 overflow-auto">
+      <div v-if="activeTab === 'pipeline'" class="flex-1 flex flex-col p-3 sm:p-6 gap-4 overflow-auto">
         <div class="shrink-0">
           <h1 class="text-lg font-bold text-text-primary">🚀 脚本执行</h1>
           <p class="text-xs text-text-muted mt-0.5">手动触发 Pipeline 运行，查看实时日志</p>
@@ -1227,17 +1501,28 @@ onUnmounted(() => {
             </div>
           </div>
 
-          <div class="flex items-center gap-3">
+          <div class="flex items-center gap-3 flex-wrap">
             <button
               :disabled="isRunning || pipelineLoading"
               class="px-5 py-2 rounded-lg text-sm font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
               :class="isRunning
                 ? 'bg-gray-600 text-gray-300'
-                : 'bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-600/20'"
+                : runForce
+                  ? 'bg-orange-600 hover:bg-orange-500 text-white shadow-lg shadow-orange-600/20'
+                  : 'bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-600/20'"
               @click="handleRunPipeline"
             >
-              {{ pipelineLoading ? '启动中...' : isRunning ? '运行中...' : '▶ 开始执行' }}
+              {{ pipelineLoading ? '启动中...' : isRunning ? '运行中...' : runForce ? '▶ 强制执行' : '▶ 开始执行' }}
             </button>
+            <label class="flex items-center gap-1.5 cursor-pointer select-none group">
+              <input
+                v-model="runForce"
+                type="checkbox"
+                class="w-4 h-4 rounded border-border text-orange-500 focus:ring-orange-500/30 bg-bg-elevated cursor-pointer"
+              />
+              <span class="text-xs text-text-secondary group-hover:text-text-primary transition-colors">强制重新执行</span>
+              <span class="text-[10px] text-text-muted/60" title="忽略幂等检查，删除已有输出并重新执行全部步骤">(?)</span>
+            </label>
             <button
               v-if="isRunning"
               class="px-5 py-2 rounded-lg bg-red-600/20 text-red-400 border border-red-500/30 text-sm font-medium hover:bg-red-600/30 transition-all duration-200"
@@ -1286,7 +1571,12 @@ onUnmounted(() => {
 
           <!-- Logs -->
           <div class="mt-3">
-            <div class="text-xs text-text-muted mb-2">运行日志</div>
+            <div class="flex items-center justify-between mb-2">
+              <div class="text-xs text-text-muted">运行日志</div>
+              <div v-if="trackedRunId" class="text-[10px] text-text-muted/60 font-mono">
+                run: {{ trackedRunId }}
+              </div>
+            </div>
             <div
               ref="logsContainer"
               class="h-64 overflow-auto rounded-lg bg-[#0d1117] border border-border p-3 font-mono text-xs leading-5 text-green-400/90"
@@ -1307,7 +1597,7 @@ onUnmounted(() => {
       <!-- ============================================================= -->
       <!-- Page: Schedule Config -->
       <!-- ============================================================= -->
-      <div v-if="activeTab === 'schedule'" class="flex-1 flex flex-col p-6 gap-4 overflow-auto">
+      <div v-if="activeTab === 'schedule'" class="flex-1 flex flex-col p-3 sm:p-6 gap-4 overflow-auto">
         <div class="shrink-0">
           <h1 class="text-lg font-bold text-text-primary">🕐 定时调度</h1>
           <p class="text-xs text-text-muted mt-0.5">配置每日自动执行 Pipeline 的时间和参数</p>
@@ -1330,7 +1620,7 @@ onUnmounted(() => {
           </div>
 
           <!-- Config grid -->
-          <div class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-5">
+          <div class="grid grid-cols-2 md:grid-cols-3 gap-3 mb-5">
             <div>
               <label class="block text-xs text-text-muted mb-1">执行时间 (时)</label>
               <input
@@ -1383,6 +1673,19 @@ onUnmounted(() => {
                 <option value="T">开启</option>
               </select>
             </div>
+            <div>
+              <label class="block text-xs text-text-muted mb-1">
+                灵感生成用户 ID
+                <span class="text-yellow-400 ml-1" title="idea_ingest/combine/review/compound 步骤需要此 ID 才能执行">⚠ 必填</span>
+              </label>
+              <input
+                v-model.number="schedule.user_id"
+                type="number"
+                min="1"
+                placeholder="例如: 1"
+                class="w-full px-3 py-2 rounded-lg bg-bg-elevated border border-border text-text-primary text-sm focus:outline-none focus:ring-1 focus:ring-blue-500/50"
+              />
+            </div>
           </div>
 
           <!-- Summary & Save -->
@@ -1411,20 +1714,21 @@ onUnmounted(() => {
             <li>• 自动执行期间仍可手动点击「脚本执行」运行，但不会同时执行两个</li>
             <li>• 调度配置会持久化保存，服务重启后自动恢复</li>
             <li>• 如果当天的 Pipeline 输出已存在，对应步骤会自动跳过</li>
+            <li class="text-yellow-400">• <strong>灵感生成用户 ID</strong>：idea_ingest / combine / review / compound 步骤需要此字段，留空则这四步全部跳过</li>
           </ul>
         </div>
       </div>
 
       <!-- ============================================================= -->
-      <!-- Page: System Config (Redesigned with Preset Selectors) -->
+      <!-- Page: 论文推荐配置 -->
       <!-- ============================================================= -->
-      <div v-if="activeTab === 'config'" class="flex-1 overflow-auto p-6">
+      <div v-if="activeTab === 'paper-recommend-config'" class="flex-1 overflow-auto p-3 sm:p-6 pb-24">
         <div class="max-w-3xl mx-auto space-y-5">
         <!-- Header -->
         <div class="flex items-center justify-between shrink-0">
           <div>
-            <h1 class="text-lg font-bold text-text-primary">⚙️ 系统配置</h1>
-            <p class="text-xs text-text-muted mt-0.5">选择已存储的模型/提示词配置并应用到各功能角色，直接编辑并保存字数上限</p>
+            <h1 class="text-lg font-bold text-text-primary">⭐ 论文推荐配置</h1>
+            <p class="text-xs text-text-muted mt-0.5">选好配置后，点击底部「保存所有更改」一次性应用</p>
           </div>
           <div class="flex items-center gap-3">
             <span v-if="sysConfigSuccessMsg" class="text-xs text-green-400 flex items-center gap-1.5">
@@ -1433,7 +1737,7 @@ onUnmounted(() => {
             </span>
             <button
               class="px-3 py-1.5 rounded-full border border-border text-xs text-text-secondary bg-transparent cursor-pointer hover:bg-bg-hover transition-colors"
-              @click="async () => { await Promise.all([loadSystemConfig(), loadLlmConfigs(), loadPromptConfigs()]); detectLlmSelections(); detectPromptSelections(); initWordLimits(); initMineruToken() }"
+              @click="async () => { await Promise.all([loadSystemConfig(), loadLlmConfigs(), loadPromptConfigs()]); detectLlmSelections(); detectPromptSelections(); snapshotSelections(); initWordLimits(); initMineruToken() }"
             >
               🔄 刷新
             </button>
@@ -1443,38 +1747,63 @@ onUnmounted(() => {
         <!-- Global loading / error -->
         <div v-if="configLoading" class="flex items-center justify-center py-16 text-text-muted">
           <span class="inline-block w-5 h-5 border-2 border-text-muted border-t-transparent rounded-full animate-spin mr-2"></span>
-            加载中...
-          </div>
+          加载中...
+        </div>
         <div v-else-if="configError" class="text-red-400 text-sm py-4">{{ configError }}</div>
 
         <template v-else>
-          <!-- ===== 快捷入口（无配置时引导） ===== -->
+          <!-- 缺少配置库时的快捷入口 -->
           <div v-if="llmConfigs.length === 0 || promptConfigs.length === 0" class="flex gap-3">
-            <div
-              v-if="llmConfigs.length === 0"
-              class="flex-1 flex items-center gap-3 px-4 py-3 rounded-xl border border-dashed border-border bg-bg-card text-xs text-text-muted"
-            >
+            <div v-if="llmConfigs.length === 0" class="flex-1 flex items-center gap-3 px-4 py-3 rounded-xl border border-dashed border-border bg-bg-card text-xs text-text-muted">
               <span class="text-base shrink-0">🤖</span>
               <span class="flex-1">尚未创建任何模型配置</span>
-              <button
-                class="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium transition-colors shrink-0"
-                @click="activeTab = 'llm-config'"
-              >➕ 创建模型配置</button>
+              <button class="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium transition-colors shrink-0" @click="activeTab = 'llm-config'">➕ 创建模型配置</button>
             </div>
-            <div
-              v-if="promptConfigs.length === 0"
-              class="flex-1 flex items-center gap-3 px-4 py-3 rounded-xl border border-dashed border-border bg-bg-card text-xs text-text-muted"
-            >
+            <div v-if="promptConfigs.length === 0" class="flex-1 flex items-center gap-3 px-4 py-3 rounded-xl border border-dashed border-border bg-bg-card text-xs text-text-muted">
               <span class="text-base shrink-0">📝</span>
               <span class="flex-1">尚未创建任何提示词配置</span>
-              <button
-                class="px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-medium transition-colors shrink-0"
-                @click="activeTab = 'prompt-config'"
-              >➕ 创建提示词</button>
+              <button class="px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-medium transition-colors shrink-0" @click="activeTab = 'prompt-config'">➕ 创建提示词</button>
             </div>
           </div>
 
-          <!-- ===== MinerU Token ===== -->
+          <!-- ── 全局快捷应用区 ── -->
+          <div class="rounded-xl bg-blue-500/5 border border-blue-500/20 overflow-hidden">
+            <div class="px-5 py-3 border-b border-blue-500/15 flex items-center gap-2">
+              <span class="text-sm">⚡</span>
+              <span class="text-sm font-semibold text-blue-300">全局快捷设置</span>
+              <span class="text-[11px] text-text-muted ml-1">— 将同一配置批量填入所有模块，之后还可以逐项微调</span>
+            </div>
+            <div class="px-5 py-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <!-- 统一模型 -->
+              <div class="flex items-center gap-2">
+                <span class="text-xs text-text-secondary shrink-0 w-20">统一模型</span>
+                <select v-model="quickFillLlmId" class="flex-1 min-w-0 px-2.5 py-1.5 rounded-lg bg-bg-elevated border border-border text-text-primary text-xs focus:outline-none focus:ring-1 focus:ring-blue-500/50 cursor-pointer">
+                  <option :value="null">— 选择模型 —</option>
+                  <option v-for="cfg in llmConfigs" :key="cfg.id" :value="cfg.id">{{ cfg.name }}</option>
+                </select>
+                <button
+                  :disabled="!quickFillLlmId"
+                  class="shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium bg-blue-600 hover:bg-blue-500 text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  @click="applyQuickFillLlm('recommend')"
+                >填入所有</button>
+              </div>
+              <!-- 统一提示词 -->
+              <div class="flex items-center gap-2">
+                <span class="text-xs text-text-secondary shrink-0 w-20">统一提示词</span>
+                <select v-model="quickFillPromptId" class="flex-1 min-w-0 px-2.5 py-1.5 rounded-lg bg-bg-elevated border border-border text-text-primary text-xs focus:outline-none focus:ring-1 focus:ring-purple-500/50 cursor-pointer">
+                  <option :value="null">— 选择提示词 —</option>
+                  <option v-for="cfg in promptConfigs" :key="cfg.id" :value="cfg.id">{{ cfg.name }}</option>
+                </select>
+                <button
+                  :disabled="!quickFillPromptId"
+                  class="shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium bg-purple-600 hover:bg-purple-500 text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  @click="applyQuickFillPrompt('recommend')"
+                >填入所有</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- MinerU Token -->
           <div class="rounded-xl bg-bg-card border border-border overflow-hidden">
             <div class="px-5 py-3.5 border-b border-border bg-bg-elevated/40 flex items-center gap-3">
               <span class="text-base leading-none">🔑</span>
@@ -1491,22 +1820,18 @@ onUnmounted(() => {
                   placeholder="请输入 MinerU Token"
                   class="w-full px-3 py-2 bg-bg-elevated border border-border rounded-lg text-sm text-text-primary focus:outline-none focus:ring-1 focus:ring-blue-500/50 transition-colors pr-10 font-mono"
                 />
-                <button
-                  class="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-secondary transition-colors text-xs select-none"
-                  @click="mineruTokenVisible = !mineruTokenVisible"
-                >{{ mineruTokenVisible ? '🙈' : '👁' }}</button>
+                <button class="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-secondary transition-colors text-xs select-none" @click="mineruTokenVisible = !mineruTokenVisible">{{ mineruTokenVisible ? '🙈' : '👁' }}</button>
               </div>
-              <button
-                :disabled="savingMineruToken"
-                class="shrink-0 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium transition-colors disabled:opacity-50"
-                @click="handleSaveMineruToken"
-              >{{ savingMineruToken ? '保存中…' : '💾 保存' }}</button>
+              <button :disabled="savingMineruToken" class="shrink-0 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium transition-colors disabled:opacity-50" @click="handleSaveMineruToken">{{ savingMineruToken ? '保存中…' : '💾 保存' }}</button>
             </div>
           </div>
 
-          <!-- ===== 功能模块卡片 ===== -->
-          <div v-for="mod in configModules" :key="mod.key" class="rounded-xl bg-bg-card border border-border overflow-hidden">
-            <!-- Module header -->
+          <!-- 论文推荐功能模块卡片 -->
+          <div
+            v-for="mod in recommendConfigModules"
+            :key="mod.key"
+            class="rounded-xl bg-bg-card border border-border overflow-hidden"
+          >
             <div class="px-5 py-3.5 border-b border-border bg-bg-elevated/40 flex items-center gap-3">
               <span class="text-base leading-none">{{ mod.icon }}</span>
               <div class="flex-1 min-w-0">
@@ -1514,80 +1839,67 @@ onUnmounted(() => {
                 <p class="text-[11px] text-text-muted">{{ mod.desc }}</p>
               </div>
             </div>
-
             <div class="divide-y divide-border/50">
               <!-- LLM row -->
-              <div v-if="mod.llmPrefix" class="px-5 py-3.5 flex items-center gap-3">
-                <div class="w-32 shrink-0 flex items-center gap-1.5">
+              <div v-if="mod.llmPrefix" class="px-5 py-3 flex items-center gap-3">
+                <!-- dirty indicator -->
+                <span
+                  class="w-1.5 h-1.5 rounded-full shrink-0 transition-colors"
+                  :class="selectedLlmConfigIds[mod.llmPrefix] !== originalLlmConfigIds[mod.llmPrefix] ? 'bg-amber-400' : 'bg-transparent'"
+                  :title="selectedLlmConfigIds[mod.llmPrefix] !== originalLlmConfigIds[mod.llmPrefix] ? '已修改，待保存' : ''"
+                ></span>
+                <div class="w-28 shrink-0 flex items-center gap-1.5">
                   <span class="text-sm">🤖</span>
                   <span class="text-xs font-medium text-text-secondary">调用模型</span>
                 </div>
-
                 <div class="flex-1 min-w-0">
                   <div v-if="selectedLlmConfigIds[mod.llmPrefix]" class="flex items-center gap-1.5 text-xs">
                     <span class="w-1.5 h-1.5 rounded-full bg-green-400 shrink-0"></span>
                     <span class="font-medium text-text-secondary">{{ llmConfigs.find(c => c.id === selectedLlmConfigIds[mod.llmPrefix])?.name || '—' }}</span>
                     <span class="text-text-muted truncate">· {{ configValues[prefixModelKey[mod.llmPrefix]] }}</span>
                   </div>
-                  <div v-else class="text-[11px] text-text-muted italic">
-                    {{ llmConfigs.length === 0 ? '暂无模型配置' : '未匹配到已存储配置' }}
-                  </div>
+                  <div v-else class="text-[11px] text-text-muted italic">{{ llmConfigs.length === 0 ? '暂无模型配置' : '未配置' }}</div>
                 </div>
-
                 <select
                   v-model="selectedLlmConfigIds[mod.llmPrefix]"
-                  class="w-40 px-2.5 py-1.5 rounded-lg bg-bg-elevated border border-border text-text-primary text-xs focus:outline-none focus:ring-1 focus:ring-blue-500/50 cursor-pointer"
+                  class="w-40 px-2.5 py-1.5 rounded-lg bg-bg-elevated border text-text-primary text-xs focus:outline-none focus:ring-1 cursor-pointer transition-colors"
+                  :class="selectedLlmConfigIds[mod.llmPrefix] !== originalLlmConfigIds[mod.llmPrefix] ? 'border-amber-500/60 focus:ring-amber-500/40' : 'border-border focus:ring-blue-500/50'"
                 >
                   <option :value="null">— 选择配置 —</option>
                   <option v-for="cfg in llmConfigs" :key="cfg.id" :value="cfg.id">{{ cfg.name }}</option>
                 </select>
-
-                <button
-                  :disabled="!selectedLlmConfigIds[mod.llmPrefix] || applyingModelPrefix === mod.llmPrefix"
-                  class="shrink-0 px-3.5 py-1.5 rounded-lg text-xs font-medium bg-blue-600 hover:bg-blue-500 text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                  @click="handleApplyLlmConfig(mod.llmPrefix!)"
-                >
-                  {{ applyingModelPrefix === mod.llmPrefix ? '应用中…' : '应用' }}
-                </button>
               </div>
-
               <!-- Prompt rows -->
-              <div v-for="prompt in mod.prompts" :key="prompt.variable" class="px-5 py-3.5 flex items-center gap-3">
-                <div class="w-32 shrink-0 flex items-center gap-1.5">
+              <div v-for="prompt in mod.prompts" :key="prompt.variable" class="px-5 py-3 flex items-center gap-3">
+                <span
+                  class="w-1.5 h-1.5 rounded-full shrink-0 transition-colors"
+                  :class="selectedPromptConfigIds[prompt.variable] !== originalPromptConfigIds[prompt.variable] ? 'bg-amber-400' : 'bg-transparent'"
+                  :title="selectedPromptConfigIds[prompt.variable] !== originalPromptConfigIds[prompt.variable] ? '已修改，待保存' : ''"
+                ></span>
+                <div class="w-28 shrink-0 flex items-center gap-1.5">
                   <span class="text-sm">📝</span>
-                  <span class="text-xs font-medium text-text-secondary">{{ prompt.label }}</span>
+                  <span class="text-xs font-medium text-text-secondary truncate">{{ prompt.label }}</span>
                 </div>
-
                 <div class="flex-1 min-w-0">
                   <div v-if="selectedPromptConfigIds[prompt.variable]" class="flex items-center gap-1.5 text-xs">
                     <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0"></span>
                     <span class="font-medium text-text-secondary">{{ promptConfigs.find(c => c.id === selectedPromptConfigIds[prompt.variable])?.name || '—' }}</span>
                   </div>
-                  <div v-else class="text-[11px] text-text-muted italic">
-                    {{ promptConfigs.length === 0 ? '暂无提示词配置' : '未匹配到已存储配置' }}
-                  </div>
+                  <div v-else class="text-[11px] text-text-muted italic">{{ promptConfigs.length === 0 ? '暂无提示词配置' : '未配置' }}</div>
                 </div>
-
                 <select
                   v-model="selectedPromptConfigIds[prompt.variable]"
-                  class="w-40 px-2.5 py-1.5 rounded-lg bg-bg-elevated border border-border text-text-primary text-xs focus:outline-none focus:ring-1 focus:ring-purple-500/50 cursor-pointer"
+                  class="w-40 px-2.5 py-1.5 rounded-lg bg-bg-elevated border text-text-primary text-xs focus:outline-none focus:ring-1 cursor-pointer transition-colors"
+                  :class="selectedPromptConfigIds[prompt.variable] !== originalPromptConfigIds[prompt.variable] ? 'border-amber-500/60 focus:ring-amber-500/40' : 'border-border focus:ring-purple-500/50'"
                 >
                   <option :value="null">— 选择配置 —</option>
                   <option v-for="cfg in promptConfigs" :key="cfg.id" :value="cfg.id">{{ cfg.name }}</option>
                 </select>
-
-                <button
-                  :disabled="!selectedPromptConfigIds[prompt.variable] || applyingPromptVariable === prompt.variable"
-                  class="shrink-0 px-3.5 py-1.5 rounded-lg text-xs font-medium bg-purple-600 hover:bg-purple-500 text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                  @click="handleApplyPromptConfig(prompt.variable)"
-                >
-                  {{ applyingPromptVariable === prompt.variable ? '应用中…' : '应用' }}
-                </button>
               </div>
             </div>
           </div>
 
-          <!-- ===== 字数上限配置 ===== -->
+          <!-- 字数上限配置 -->
           <div class="rounded-xl bg-bg-card border border-border overflow-hidden">
             <div class="px-5 py-3.5 border-b border-border bg-bg-elevated/40 flex items-center justify-between">
               <div class="flex items-center gap-3">
@@ -1597,32 +1909,15 @@ onUnmounted(() => {
                   <p class="text-[11px] text-text-muted">控制摘要各部分的字数上限（按去空白字符计），超出则调用模型压缩</p>
                 </div>
               </div>
-              <button
-                :disabled="savingWordLimits"
-                class="px-4 py-1.5 rounded-lg bg-green-600 hover:bg-green-500 text-white text-xs font-medium transition-colors disabled:opacity-50 shrink-0"
-                @click="handleSaveWordLimits"
-              >
-                {{ savingWordLimits ? '保存中...' : '💾 保存' }}
-              </button>
+              <button :disabled="savingWordLimits" class="px-4 py-1.5 rounded-lg bg-green-600 hover:bg-green-500 text-white text-xs font-medium transition-colors disabled:opacity-50 shrink-0" @click="handleSaveWordLimits">{{ savingWordLimits ? '保存中...' : '💾 保存' }}</button>
             </div>
             <div class="p-5">
               <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
                 <div v-for="(defaultVal, key) in wordLimitDefaults" :key="key">
                   <label class="block text-xs font-medium text-text-secondary mb-1.5">{{ wordLimitLabels[key] }}</label>
                   <div class="flex items-center gap-1.5">
-                    <input
-                      v-model.number="wordLimitValues[key]"
-                      type="number"
-                      step="10"
-                      min="10"
-                      class="flex-1 min-w-0 px-3 py-2 bg-bg-elevated border border-border rounded-lg text-sm text-text-primary focus:outline-none focus:ring-1 focus:ring-blue-500/50 transition-colors"
-                    />
-                    <button
-                      v-if="wordLimitValues[key] !== defaultVal"
-                      class="shrink-0 px-2 py-1.5 rounded text-[11px] border border-border text-text-muted hover:text-text-secondary hover:border-text-muted transition-colors"
-                      title="重置为默认值"
-                      @click="wordLimitValues[key] = defaultVal"
-                    >↺</button>
+                    <input v-model.number="wordLimitValues[key]" type="number" step="10" min="10" class="flex-1 min-w-0 px-3 py-2 bg-bg-elevated border border-border rounded-lg text-sm text-text-primary focus:outline-none focus:ring-1 focus:ring-blue-500/50 transition-colors" />
+                    <button v-if="wordLimitValues[key] !== defaultVal" class="shrink-0 px-2 py-1.5 rounded text-[11px] border border-border text-text-muted hover:text-text-secondary hover:border-text-muted transition-colors" title="重置为默认值" @click="wordLimitValues[key] = defaultVal">↺</button>
                   </div>
                   <p class="text-[10px] text-text-muted mt-0.5">默认: {{ defaultVal }}</p>
                 </div>
@@ -1631,12 +1926,229 @@ onUnmounted(() => {
           </div>
         </template>
         </div><!-- /max-w-3xl -->
+
+        <!-- ── 底部 Sticky 保存栏 ── -->
+        <div class="fixed bottom-0 left-0 md:left-56 right-0 z-20 pointer-events-none">
+          <div class="max-w-3xl mx-auto px-3 sm:px-6 pb-4 pointer-events-auto">
+            <transition name="slide-up">
+              <div
+                v-if="!configLoading && !configError"
+                class="flex items-center justify-between gap-4 px-5 py-3.5 rounded-2xl border shadow-lg backdrop-blur-md transition-all"
+                :class="recommendDirtyCount > 0 ? 'bg-bg-card/95 border-amber-500/40 shadow-amber-500/10' : 'bg-bg-card/80 border-border/60 shadow-black/20'"
+              >
+                <div class="flex items-center gap-2.5 text-sm">
+                  <span v-if="recommendDirtyCount > 0" class="flex items-center gap-1.5 text-amber-400 font-medium">
+                    <span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse shrink-0"></span>
+                    {{ recommendDirtyCount }} 项待保存
+                  </span>
+                  <span v-else class="text-text-muted text-xs">所有配置已是最新</span>
+                </div>
+                <button
+                  :disabled="batchSaving && batchSaveScope === 'recommend'"
+                  class="shrink-0 px-5 py-2 rounded-xl text-sm font-semibold text-white transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed"
+                  :class="recommendDirtyCount > 0 ? 'bg-blue-600 hover:bg-blue-500 shadow-md shadow-blue-600/30' : 'bg-bg-elevated text-text-secondary hover:bg-bg-hover'"
+                  @click="handleBatchSave('recommend')"
+                >
+                  {{ batchSaving && batchSaveScope === 'recommend' ? '保存中…' : '💾 保存所有更改' }}
+                </button>
+              </div>
+            </transition>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============================================================= -->
+      <!-- Page: 灵感生成配置 -->
+      <!-- ============================================================= -->
+      <div v-else-if="activeTab === 'idea-generate-config'" class="flex-1 overflow-auto p-3 sm:p-6 pb-24">
+        <div class="max-w-3xl mx-auto space-y-5">
+        <!-- Header -->
+        <div class="flex items-center justify-between shrink-0">
+          <div>
+            <h1 class="text-lg font-bold text-text-primary">💡 灵感生成配置</h1>
+            <p class="text-xs text-text-muted mt-0.5">选好配置后，点击底部「保存所有更改」一次性应用</p>
+          </div>
+          <div class="flex items-center gap-3">
+            <span v-if="sysConfigSuccessMsg" class="text-xs text-green-400 flex items-center gap-1.5">
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5" /></svg>
+              {{ sysConfigSuccessMsg }}
+            </span>
+            <button
+              class="px-3 py-1.5 rounded-full border border-border text-xs text-text-secondary bg-transparent cursor-pointer hover:bg-bg-hover transition-colors"
+              @click="async () => { await Promise.all([loadSystemConfig(), loadLlmConfigs(), loadPromptConfigs()]); detectLlmSelections(); detectPromptSelections(); snapshotSelections() }"
+            >
+              🔄 刷新
+            </button>
+          </div>
+        </div>
+
+        <!-- Global loading / error -->
+        <div v-if="configLoading" class="flex items-center justify-center py-16 text-text-muted">
+          <span class="inline-block w-5 h-5 border-2 border-text-muted border-t-transparent rounded-full animate-spin mr-2"></span>
+          加载中...
+        </div>
+        <div v-else-if="configError" class="text-red-400 text-sm py-4">{{ configError }}</div>
+
+        <template v-else>
+          <!-- 缺少配置库时的快捷入口 -->
+          <div v-if="llmConfigs.length === 0 || promptConfigs.length === 0" class="flex gap-3">
+            <div v-if="llmConfigs.length === 0" class="flex-1 flex items-center gap-3 px-4 py-3 rounded-xl border border-dashed border-border bg-bg-card text-xs text-text-muted">
+              <span class="text-base shrink-0">🤖</span>
+              <span class="flex-1">尚未创建任何模型配置</span>
+              <button class="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium transition-colors shrink-0" @click="activeTab = 'llm-config'">➕ 创建模型配置</button>
+            </div>
+            <div v-if="promptConfigs.length === 0" class="flex-1 flex items-center gap-3 px-4 py-3 rounded-xl border border-dashed border-border bg-bg-card text-xs text-text-muted">
+              <span class="text-base shrink-0">📝</span>
+              <span class="flex-1">尚未创建任何提示词配置</span>
+              <button class="px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-medium transition-colors shrink-0" @click="activeTab = 'prompt-config'">➕ 创建提示词</button>
+            </div>
+          </div>
+
+          <!-- ── 全局快捷应用区 ── -->
+          <div class="rounded-xl bg-orange-500/5 border border-orange-500/20 overflow-hidden">
+            <div class="px-5 py-3 border-b border-orange-500/15 flex items-center gap-2">
+              <span class="text-sm">⚡</span>
+              <span class="text-sm font-semibold text-orange-300">全局快捷设置</span>
+              <span class="text-[11px] text-text-muted ml-1">— 将同一配置批量填入所有阶段，之后还可以逐项微调</span>
+            </div>
+            <div class="px-5 py-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <!-- 统一模型 -->
+              <div class="flex items-center gap-2">
+                <span class="text-xs text-text-secondary shrink-0 w-20">统一模型</span>
+                <select v-model="quickFillLlmId" class="flex-1 min-w-0 px-2.5 py-1.5 rounded-lg bg-bg-elevated border border-border text-text-primary text-xs focus:outline-none focus:ring-1 focus:ring-orange-500/50 cursor-pointer">
+                  <option :value="null">— 选择模型 —</option>
+                  <option v-for="cfg in llmConfigs" :key="cfg.id" :value="cfg.id">{{ cfg.name }}</option>
+                </select>
+                <button
+                  :disabled="!quickFillLlmId"
+                  class="shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium bg-orange-600 hover:bg-orange-500 text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  @click="applyQuickFillLlm('idea')"
+                >填入所有</button>
+              </div>
+              <!-- 统一提示词 -->
+              <div class="flex items-center gap-2">
+                <span class="text-xs text-text-secondary shrink-0 w-20">统一提示词</span>
+                <select v-model="quickFillPromptId" class="flex-1 min-w-0 px-2.5 py-1.5 rounded-lg bg-bg-elevated border border-border text-text-primary text-xs focus:outline-none focus:ring-1 focus:ring-orange-400/50 cursor-pointer">
+                  <option :value="null">— 选择提示词 —</option>
+                  <option v-for="cfg in promptConfigs" :key="cfg.id" :value="cfg.id">{{ cfg.name }}</option>
+                </select>
+                <button
+                  :disabled="!quickFillPromptId"
+                  class="shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium bg-orange-500 hover:bg-orange-400 text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  @click="applyQuickFillPrompt('idea')"
+                >填入所有</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- 灵感生成功能模块卡片 -->
+          <div
+            v-for="mod in ideaConfigModules"
+            :key="mod.key"
+            class="rounded-xl bg-bg-card border border-border overflow-hidden"
+          >
+            <div class="px-5 py-3.5 border-b border-border bg-bg-elevated/40 flex items-center gap-3">
+              <span class="text-base leading-none">{{ mod.icon }}</span>
+              <div class="flex-1 min-w-0">
+                <h2 class="text-sm font-semibold text-text-primary">{{ mod.label }}</h2>
+                <p class="text-[11px] text-text-muted">{{ mod.desc }}</p>
+              </div>
+            </div>
+            <div class="divide-y divide-border/50">
+              <!-- LLM row -->
+              <div v-if="mod.llmPrefix" class="px-5 py-3 flex items-center gap-3">
+                <span
+                  class="w-1.5 h-1.5 rounded-full shrink-0 transition-colors"
+                  :class="selectedLlmConfigIds[mod.llmPrefix] !== originalLlmConfigIds[mod.llmPrefix] ? 'bg-amber-400' : 'bg-transparent'"
+                  :title="selectedLlmConfigIds[mod.llmPrefix] !== originalLlmConfigIds[mod.llmPrefix] ? '已修改，待保存' : ''"
+                ></span>
+                <div class="w-28 shrink-0 flex items-center gap-1.5">
+                  <span class="text-sm">🤖</span>
+                  <span class="text-xs font-medium text-text-secondary">调用模型</span>
+                </div>
+                <div class="flex-1 min-w-0">
+                  <div v-if="selectedLlmConfigIds[mod.llmPrefix]" class="flex items-center gap-1.5 text-xs">
+                    <span class="w-1.5 h-1.5 rounded-full bg-green-400 shrink-0"></span>
+                    <span class="font-medium text-text-secondary">{{ llmConfigs.find(c => c.id === selectedLlmConfigIds[mod.llmPrefix])?.name || '—' }}</span>
+                    <span class="text-text-muted truncate">· {{ configValues[prefixModelKey[mod.llmPrefix]] }}</span>
+                  </div>
+                  <div v-else class="text-[11px] text-text-muted italic">{{ llmConfigs.length === 0 ? '暂无模型配置' : '未配置' }}</div>
+                </div>
+                <select
+                  v-model="selectedLlmConfigIds[mod.llmPrefix]"
+                  class="w-40 px-2.5 py-1.5 rounded-lg bg-bg-elevated border text-text-primary text-xs focus:outline-none focus:ring-1 cursor-pointer transition-colors"
+                  :class="selectedLlmConfigIds[mod.llmPrefix] !== originalLlmConfigIds[mod.llmPrefix] ? 'border-amber-500/60 focus:ring-amber-500/40' : 'border-border focus:ring-orange-500/50'"
+                >
+                  <option :value="null">— 选择配置 —</option>
+                  <option v-for="cfg in llmConfigs" :key="cfg.id" :value="cfg.id">{{ cfg.name }}</option>
+                </select>
+              </div>
+              <!-- Prompt rows -->
+              <div v-for="prompt in mod.prompts" :key="prompt.variable" class="px-5 py-3 flex items-center gap-3">
+                <span
+                  class="w-1.5 h-1.5 rounded-full shrink-0 transition-colors"
+                  :class="selectedPromptConfigIds[prompt.variable] !== originalPromptConfigIds[prompt.variable] ? 'bg-amber-400' : 'bg-transparent'"
+                  :title="selectedPromptConfigIds[prompt.variable] !== originalPromptConfigIds[prompt.variable] ? '已修改，待保存' : ''"
+                ></span>
+                <div class="w-28 shrink-0 flex items-center gap-1.5">
+                  <span class="text-sm">📝</span>
+                  <span class="text-xs font-medium text-text-secondary truncate">{{ prompt.label }}</span>
+                </div>
+                <div class="flex-1 min-w-0">
+                  <div v-if="selectedPromptConfigIds[prompt.variable]" class="flex items-center gap-1.5 text-xs">
+                    <span class="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0"></span>
+                    <span class="font-medium text-text-secondary">{{ promptConfigs.find(c => c.id === selectedPromptConfigIds[prompt.variable])?.name || '—' }}</span>
+                  </div>
+                  <div v-else class="text-[11px] text-text-muted italic">{{ promptConfigs.length === 0 ? '暂无提示词配置' : '未配置' }}</div>
+                </div>
+                <select
+                  v-model="selectedPromptConfigIds[prompt.variable]"
+                  class="w-40 px-2.5 py-1.5 rounded-lg bg-bg-elevated border text-text-primary text-xs focus:outline-none focus:ring-1 cursor-pointer transition-colors"
+                  :class="selectedPromptConfigIds[prompt.variable] !== originalPromptConfigIds[prompt.variable] ? 'border-amber-500/60 focus:ring-amber-500/40' : 'border-border focus:ring-orange-500/50'"
+                >
+                  <option :value="null">— 选择配置 —</option>
+                  <option v-for="cfg in promptConfigs" :key="cfg.id" :value="cfg.id">{{ cfg.name }}</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </template>
+        </div><!-- /max-w-3xl -->
+
+        <!-- ── 底部 Sticky 保存栏 ── -->
+        <div class="fixed bottom-0 left-0 md:left-56 right-0 z-20 pointer-events-none">
+          <div class="max-w-3xl mx-auto px-3 sm:px-6 pb-4 pointer-events-auto">
+            <transition name="slide-up">
+              <div
+                v-if="!configLoading && !configError"
+                class="flex items-center justify-between gap-4 px-5 py-3.5 rounded-2xl border shadow-lg backdrop-blur-md transition-all"
+                :class="ideaDirtyCount > 0 ? 'bg-bg-card/95 border-amber-500/40 shadow-amber-500/10' : 'bg-bg-card/80 border-border/60 shadow-black/20'"
+              >
+                <div class="flex items-center gap-2.5 text-sm">
+                  <span v-if="ideaDirtyCount > 0" class="flex items-center gap-1.5 text-amber-400 font-medium">
+                    <span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse shrink-0"></span>
+                    {{ ideaDirtyCount }} 项待保存
+                  </span>
+                  <span v-else class="text-text-muted text-xs">所有配置已是最新</span>
+                </div>
+                <button
+                  :disabled="batchSaving && batchSaveScope === 'idea'"
+                  class="shrink-0 px-5 py-2 rounded-xl text-sm font-semibold text-white transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed"
+                  :class="ideaDirtyCount > 0 ? 'bg-orange-600 hover:bg-orange-500 shadow-md shadow-orange-600/30' : 'bg-bg-elevated text-text-secondary hover:bg-bg-hover'"
+                  @click="handleBatchSave('idea')"
+                >
+                  {{ batchSaving && batchSaveScope === 'idea' ? '保存中…' : '💾 保存所有更改' }}
+                </button>
+              </div>
+            </transition>
+          </div>
+        </div>
       </div>
 
       <!-- ============================================================= -->
       <!-- Page: LLM Config Management -->
       <!-- ============================================================= -->
-      <div v-if="activeTab === 'llm-config'" class="flex-1 flex flex-col p-6 gap-4 overflow-auto">
+      <div v-if="activeTab === 'llm-config'" class="flex-1 flex flex-col p-3 sm:p-6 gap-4 overflow-auto">
         <div class="shrink-0 flex items-center justify-between">
           <div>
             <h1 class="text-lg font-bold text-text-primary">🤖 模型配置管理</h1>
@@ -1798,7 +2310,7 @@ onUnmounted(() => {
       <!-- ============================================================= -->
       <!-- Page: Prompt Config Management -->
       <!-- ============================================================= -->
-      <div v-if="activeTab === 'prompt-config'" class="flex-1 flex flex-col p-6 gap-4 overflow-auto">
+      <div v-if="activeTab === 'prompt-config'" class="flex-1 flex flex-col p-3 sm:p-6 gap-4 overflow-auto">
         <div class="shrink-0 flex items-center justify-between">
           <div>
             <h1 class="text-lg font-bold text-text-primary">📝 提示词配置管理</h1>
@@ -1916,3 +2428,15 @@ onUnmounted(() => {
     </div>
   </div>
 </template>
+
+<style scoped>
+.slide-up-enter-active,
+.slide-up-leave-active {
+  transition: transform 0.25s ease, opacity 0.25s ease;
+}
+.slide-up-enter-from,
+.slide-up-leave-to {
+  transform: translateY(100%);
+  opacity: 0;
+}
+</style>

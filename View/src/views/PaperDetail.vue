@@ -21,6 +21,7 @@ const loading = ref(true)
 const error = ref('')
 const activeTab = ref<'summary' | 'assets'>('summary')
 const showPdfPane = ref(false)
+const pdfViewerError = ref(false)
 
 function buildPdfViewerSrc(pdfUrl: string, paperId: string): string {
   const viewerPath = '/static/pdfjs/web/viewer.html'
@@ -29,6 +30,11 @@ function buildPdfViewerSrc(pdfUrl: string, paperId: string): string {
 
 function openPdfPane() {
   showPdfPane.value = true
+  pdfViewerError.value = false
+}
+
+function handlePdfViewerError() {
+  pdfViewerError.value = true
 }
 
 function closePdfPane() {
@@ -64,7 +70,7 @@ watch(
 </script>
 
 <template>
-  <div :class="showPdfPane ? 'h-full overflow-hidden p-6' : 'h-full overflow-y-auto p-6'">
+  <div :class="showPdfPane ? 'h-full overflow-hidden p-3 sm:p-6' : 'h-full overflow-y-auto p-3 sm:p-6'">
     <div :class="showPdfPane ? 'h-full max-w-none' : 'max-w-3xl mx-auto pb-24'">
       <!-- Back -->
       <button
@@ -94,13 +100,13 @@ watch(
 
       <!-- Content -->
       <template v-if="detail && !loading">
+        <!-- PDF split view: flex-col on mobile, flex-row on md+ -->
         <div
-          :class="showPdfPane ? 'h-full flex items-stretch' : ''"
-          :style="showPdfPane ? 'padding-left:3%;padding-right:3%;gap:3%;' : ''"
+          :class="showPdfPane ? 'h-full flex flex-col md:flex-row items-stretch gap-3 md:gap-[3%]' : ''"
         >
-          <div :class="showPdfPane ? 'w-[40%] h-full min-w-0 overflow-y-auto' : ''">
+          <div :class="showPdfPane ? 'h-1/2 md:h-full md:w-[40%] min-w-0 overflow-y-auto' : ''">
             <!-- Header card -->
-            <div class="bg-bg-card rounded-2xl border border-border p-6 mb-5">
+            <div class="bg-bg-card rounded-2xl border border-border p-4 sm:p-6 mb-5">
               <div class="flex flex-wrap items-center gap-2 mb-3">
                 <span class="px-3 py-1 rounded-full bg-gradient-to-r from-[#fd267a] to-[#ff6036] text-xs font-semibold text-white">
                   {{ detail.summary.institution || '未知机构' }}
@@ -112,25 +118,25 @@ watch(
                 <span class="text-xs text-text-muted">{{ detail.date }}</span>
               </div>
 
-              <h1 class="text-2xl font-bold text-text-primary leading-snug mb-2">
+              <h1 class="text-xl sm:text-2xl font-bold text-text-primary leading-snug mb-2">
                 {{ detail.summary.short_title }}
               </h1>
               <p class="text-sm text-text-secondary leading-relaxed mb-4">
                 {{ detail.summary['📖标题'] }}
               </p>
 
-              <div class="flex flex-wrap gap-3">
+              <div class="flex flex-wrap gap-2 sm:gap-3">
                 <a
                   :href="detail.arxiv_url"
                   target="_blank"
                   rel="noopener"
-                  class="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-bg-elevated border border-border text-sm font-medium text-tinder-blue no-underline hover:bg-bg-hover transition-colors"
+                  class="inline-flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-full bg-bg-elevated border border-border text-sm font-medium text-tinder-blue no-underline hover:bg-bg-hover transition-colors"
                 >
                   📄 arXiv
                 </a>
                 <button
                   type="button"
-                  class="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-bg-elevated border border-border text-sm font-medium text-tinder-pink cursor-pointer hover:bg-bg-hover transition-colors"
+                  class="inline-flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-full bg-bg-elevated border border-border text-sm font-medium text-tinder-pink cursor-pointer hover:bg-bg-hover transition-colors"
                   @click="openPdfPane"
                 >
                   📕 PDF
@@ -142,7 +148,7 @@ watch(
             <!-- Tabs -->
             <div class="flex gap-1 mb-4 border-b border-border">
               <button
-                class="px-5 py-2.5 text-sm font-semibold border-b-2 transition-colors cursor-pointer bg-transparent border-l-0 border-r-0 border-t-0"
+                class="px-4 sm:px-5 py-2.5 text-sm font-semibold border-b-2 transition-colors cursor-pointer bg-transparent border-l-0 border-r-0 border-t-0"
                 :class="activeTab === 'summary'
                   ? 'border-tinder-pink text-tinder-pink'
                   : 'border-transparent text-text-muted hover:text-text-secondary'"
@@ -150,7 +156,7 @@ watch(
               >论文摘要</button>
               <button
                 v-if="detail.paper_assets"
-                class="px-5 py-2.5 text-sm font-semibold border-b-2 transition-colors cursor-pointer bg-transparent border-l-0 border-r-0 border-t-0"
+                class="px-4 sm:px-5 py-2.5 text-sm font-semibold border-b-2 transition-colors cursor-pointer bg-transparent border-l-0 border-r-0 border-t-0"
                 :class="activeTab === 'assets'
                   ? 'border-tinder-pink text-tinder-pink'
                   : 'border-transparent text-text-muted hover:text-text-secondary'"
@@ -159,19 +165,19 @@ watch(
             </div>
 
             <!-- Summary tab -->
-            <div v-if="activeTab === 'summary'" class="bg-bg-card rounded-2xl border border-border p-6">
+            <div v-if="activeTab === 'summary'" class="bg-bg-card rounded-2xl border border-border p-4 sm:p-6">
               <SummarySection :summary="detail.summary" />
             </div>
 
             <!-- Assets tab -->
-            <div v-if="activeTab === 'assets' && detail.paper_assets" class="bg-bg-card rounded-2xl border border-border p-6">
+            <div v-if="activeTab === 'assets' && detail.paper_assets" class="bg-bg-card rounded-2xl border border-border p-4 sm:p-6">
               <AssetsAccordion :assets="detail.paper_assets" />
             </div>
           </div>
 
           <div
             v-if="showPdfPane"
-            class="w-[51%] h-full min-w-0 bg-bg-card rounded-2xl border border-border overflow-hidden flex flex-col"
+            class="h-1/2 md:h-full md:w-[57%] min-w-0 bg-bg-card rounded-2xl border border-border overflow-hidden flex flex-col"
           >
             <div class="shrink-0 px-3 py-2 border-b border-border flex items-center justify-between gap-2">
               <span class="text-xs text-text-muted truncate">{{ detail.summary.paper_id }}.pdf</span>
@@ -193,10 +199,24 @@ watch(
                 </button>
               </div>
             </div>
+            <div v-if="pdfViewerError" class="flex-1 flex flex-col items-center justify-center p-8 text-center">
+              <p class="text-text-muted mb-4">PDF 阅读器加载失败</p>
+              <p class="text-sm text-text-muted mb-6">请尝试在新窗口中打开 PDF</p>
+              <a
+                :href="detail.pdf_url"
+                target="_blank"
+                rel="noopener"
+                class="px-4 py-2 rounded-full bg-tinder-pink text-white text-sm font-medium no-underline hover:bg-[#e01f6e] transition-colors"
+              >
+                在新窗口打开 PDF
+              </a>
+            </div>
             <iframe
+              v-else
               :src="buildPdfViewerSrc(detail.pdf_url, detail.summary.paper_id)"
               class="w-full flex-1 border-none bg-black"
               title="PDF Viewer"
+              @error="handlePdfViewerError"
             />
           </div>
         </div>

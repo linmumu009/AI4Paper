@@ -5,6 +5,32 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>AI4Papers - 论文日报</title>
+    <!-- 移动设备自动跳转移动端 -->
+    <script>
+      ;(function(){
+        var ua = navigator.userAgent || ''
+        var isTablet = /iPad|Tablet|PlayBook|Silk/i.test(ua) || (/Android/i.test(ua) && !/Mobile/i.test(ua))
+        var isPhone = !isTablet && /Android|iPhone|iPod|Mobile|webOS|Windows Phone/i.test(ua)
+        if (isPhone) {
+          var loc = window.location;
+          if (loc.port === '5173') {
+            // 开发模式：跳到移动端 dev server 端口
+            loc.replace(loc.protocol + '//' + loc.hostname + ':5174' + loc.pathname + loc.search + loc.hash);
+          } else if (!loc.pathname.startsWith('/m/') && !loc.pathname.startsWith('/api/')) {
+            // 生产模式：跳到 /m/ 路径
+            loc.replace('/m' + loc.pathname + loc.search + loc.hash);
+          }
+        }
+      })()
+    </script>
+    <!-- 在 CSS/JS 加载前立即设置主题，防止闪烁 -->
+    <script>
+      ;(function(){
+        var t = localStorage.getItem('ai4papers-theme')
+        if (!t) t = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'
+        document.documentElement.setAttribute('data-theme', t)
+      })()
+    </script>
   </head>
   <body>
     <div id="app"></div>

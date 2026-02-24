@@ -1,5 +1,6 @@
 import os
 import sys
+import shutil
 import subprocess
 from datetime import datetime
 
@@ -24,7 +25,12 @@ STEP_OUTPUT_PATHS = {
     "summary_limit": lambda d: os.path.join(ROOT, DATA_ROOT, "summary_limit", "single", d),
     "select_image": lambda d: os.path.join(ROOT, DATA_ROOT, "select_image", d, f"select_image_{d}.json"),
     "file_collect": lambda d: os.path.join(ROOT, DATA_ROOT, "file_collect", d),
-    "paper_assets": lambda d: os.path.join(ROOT, DATA_ROOT, "paper_assets", f"{d}.jsonl"),
+    "paper_assets":  lambda d: os.path.join(ROOT, DATA_ROOT, "paper_assets",  f"{d}.jsonl"),
+    # Inspiration v2 pipeline steps
+    "idea_ingest":   lambda d: os.path.join(ROOT, DATA_ROOT, "idea_ingest",   f"{d}.jsonl"),
+    "idea_combine":  lambda d: os.path.join(ROOT, DATA_ROOT, "idea_combine",  f"{d}.jsonl"),
+    "idea_review":   lambda d: os.path.join(ROOT, DATA_ROOT, "idea_review",   f"{d}.jsonl"),
+    "idea_compound": lambda d: os.path.join(ROOT, DATA_ROOT, "idea_compound", f"{d}.jsonl"),
     # zotero_push has no local dated output; no entry so it is never skipped by output check
 }
 
@@ -46,6 +52,11 @@ STEPS = {
     "file_collect": [sys.executable, "-u", os.path.join(ROOT, "Controller", "file_collect.py")],
     "paper_assets": [sys.executable, "-u", os.path.join(ROOT, "Controller", "paper_assets.py")],
     "zotero_push": [sys.executable, "-u", os.path.join(ROOT, "Controller", "zotero_push.py")],
+    # Inspiration v2 pipeline steps
+    "idea_ingest": [sys.executable, "-u", os.path.join(ROOT, "Controller", "idea_ingest.py")],
+    "idea_combine": [sys.executable, "-u", os.path.join(ROOT, "Controller", "idea_combine.py")],
+    "idea_review": [sys.executable, "-u", os.path.join(ROOT, "Controller", "idea_review.py")],
+    "idea_compound": [sys.executable, "-u", os.path.join(ROOT, "Controller", "idea_compound.py")],
 }
 
 
@@ -68,6 +79,11 @@ PIPELINES = {
         "file_collect",
         "paper_assets",
         "zotero_push",
+        # Inspiration v2 auto-pipeline
+        "idea_ingest",
+        "idea_combine",
+        "idea_review",
+        "idea_compound",
     ],
     "daily": [
         "arxiv_search",
@@ -87,6 +103,18 @@ PIPELINES = {
         "file_collect",
         "paper_assets",
         "zotero_push",
+        # Inspiration v2 auto-pipeline
+        "idea_ingest",
+        "idea_combine",
+        "idea_review",
+        "idea_compound",
+    ],
+    # Standalone idea pipeline (can be run independently)
+    "idea": [
+        "idea_ingest",
+        "idea_combine",
+        "idea_review",
+        "idea_compound",
     ],
 }
 
@@ -99,6 +127,24 @@ def step_output_exists(step: str, date_str: str) -> bool:
         return True
     if os.path.isdir(path):
         return True
+    return False
+
+
+def step_output_remove(step: str, date_str: str) -> bool:
+    """Delete the output file/directory for *step* on *date_str*.
+    Returns True if something was actually removed."""
+    if step not in STEP_OUTPUT_PATHS:
+        return False
+    path = STEP_OUTPUT_PATHS[step](date_str)
+    try:
+        if os.path.isfile(path):
+            os.remove(path)
+            return True
+        if os.path.isdir(path):
+            shutil.rmtree(path)
+            return True
+    except OSError as exc:
+        print(f"WARN: failed to remove output for {step}: {exc}", flush=True)
     return False
 
 
@@ -182,6 +228,12 @@ def main(argv=None):
                 zo_value = raw
         # 同样从首个 step 的参数中移除 --Zo 及其值，避免下游脚本 argparse 报错
         extra = extra[:idx] + extra[idx + 2:]
+    # --force（强制重新执行：删除已有输出，跳过幂等检查）
+    force = False
+    if "--force" in extra:
+        idx = extra.index("--force")
+        force = True
+        extra = extra[:idx] + extra[idx + 1:]
     zo_value = (zo_value or "F").strip().upper()
     if zo_value not in ("T", "F"):
         zo_value = "F"
@@ -199,11 +251,14 @@ def main(argv=None):
     else:
         steps = list(steps)
     print(
-        f"START pipeline '{pipeline}' with {len(steps)} step(s) RUN_DATE={run_date} Zo={zo_value}",
+        f"START pipeline '{pipeline}' with {len(steps)} step(s) RUN_DATE={run_date} Zo={zo_value} force={force}",
         flush=True,
     )
     # Steps that accept --user-id for per-user config overrides
-    _USER_ID_STEPS = {"llm_select_theme", "pdf_info", "paper_assets", "paper_summary", "summary_limit"}
+    _USER_ID_STEPS = {
+        "llm_select_theme", "pdf_info", "paper_assets", "paper_summary", "summary_limit",
+        "idea_ingest", "idea_combine", "idea_review", "idea_compound",
+    }
 
     for i, step in enumerate(steps):
         if i == 0:
@@ -214,8 +269,12 @@ def main(argv=None):
         if user_id_value and step in _USER_ID_STEPS:
             step_args.extend(["--user-id", str(user_id_value)])
         if step_output_exists(step, run_date):
-            print(f"SKIP step: {step} (output exists for {run_date})", flush=True)
-            continue
+            if force:
+                step_output_remove(step, run_date)
+                print(f"FORCE step: {step} (removed old output for {run_date})", flush=True)
+            else:
+                print(f"SKIP step: {step} (output exists for {run_date})", flush=True)
+                continue
         print(f"RUN step: {step}", flush=True)
         run_step(step, step_args, env=env)
         if step == "arxiv_search":

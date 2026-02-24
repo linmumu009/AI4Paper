@@ -74,6 +74,17 @@ def init_db() -> None:
 _NO_DEFAULT_KEYS: dict[str, set[str]] = {
     "compare": {"llm_base_url", "llm_api_key", "llm_model", "llm_preset_id", "prompt_preset_id"},
     "inspiration": {"llm_base_url", "llm_api_key", "llm_model", "llm_preset_id", "prompt_preset_id"},
+    "idea_generate": {
+        "llm_base_url", "llm_api_key", "llm_model", "llm_preset_id", "prompt_preset_id",
+        # Per-phase LLM preset IDs (每阶段独立 1:1)
+        "ingest_llm_preset_id",    "ingest_prompt_preset_id",
+        "question_llm_preset_id",  "question_prompt_preset_id",
+        "candidate_llm_preset_id", "candidate_prompt_preset_id",
+        "review_llm_preset_id",    "review_prompt_preset_id",
+        "revise_llm_preset_id",    "revise_prompt_preset_id",
+        "plan_llm_preset_id",      "plan_prompt_preset_id",
+        "eval_llm_preset_id",      "eval_prompt_preset_id",
+    },
     "paper_recommend": {
         "llm_base_url", "llm_api_key", "llm_model", "llm_preset_id", "prompt_preset_id",
         # Per-module LLM preset IDs
@@ -250,6 +261,25 @@ _FEATURE_DEFAULTS: dict[str, dict[str, Any]] = {
         "section_limit_findings": 270,
         "section_limit_opinion": 150,
         "headline_limit": 18,
+    },
+    "idea_generate": {
+        "llm_base_url": "",
+        "llm_api_key": "",
+        "llm_model": "",
+        "temperature": 0.7,
+        "max_tokens": 8192,
+        "input_hard_limit": 129024,
+        "input_safety_margin": 4096,
+        # system_prompt kept for backward compatibility (maps to ingest phase)
+        "system_prompt": "",
+        # Per-phase prompt text overrides (每阶段独立，空值 = 回退到 config.py 默认值)
+        "ingest_system_prompt":    "",
+        "question_system_prompt":  "",
+        "candidate_system_prompt": "",
+        "review_system_prompt":    "",
+        "revise_system_prompt":    "",
+        "plan_system_prompt":      "",
+        "eval_system_prompt":      "",
     },
     # Future features can be added here:
     # "theme_filter": { ... },

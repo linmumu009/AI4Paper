@@ -16,6 +16,10 @@ import type {
   KbCompareResultsTree,
   PaperSummary,
   AuthPayload,
+  AuthRegisterPayload,
+  AuthSmsLoginPayload,
+  SmsSendPayload,
+  SmsSendResponse,
   AuthActionResponse,
   AuthMeResponse,
   AuthLogoutResponse,
@@ -365,7 +369,12 @@ export async function deleteAnnotation(annotationId: number): Promise<void> {
 // Auth API
 // ---------------------------------------------------------------------------
 
-export async function authRegister(payload: AuthPayload): Promise<AuthActionResponse> {
+export async function authSendSms(payload: SmsSendPayload): Promise<SmsSendResponse> {
+  const { data } = await http.post<SmsSendResponse>('/auth/sms/send', payload)
+  return data
+}
+
+export async function authRegister(payload: AuthRegisterPayload): Promise<AuthActionResponse> {
   const { data } = await http.post<AuthActionResponse>('/auth/register', payload)
   return data
 }
@@ -375,13 +384,51 @@ export async function authLogin(payload: AuthPayload): Promise<AuthActionRespons
   return data
 }
 
+export async function authLoginSms(payload: AuthSmsLoginPayload): Promise<AuthActionResponse> {
+  const { data } = await http.post<AuthActionResponse>('/auth/login/sms', payload)
+  return data
+}
+
 export async function authMe(): Promise<AuthMeResponse> {
   const { data } = await http.get<AuthMeResponse>('/auth/me')
   return data
 }
 
+export async function checkUsername(username: string, excludeUserId?: number): Promise<{ available: boolean; message: string }> {
+  const params: Record<string, any> = { username }
+  if (excludeUserId !== undefined) params.exclude_user_id = excludeUserId
+  const { data } = await http.get<{ available: boolean; message: string }>('/auth/check-username', { params })
+  return data
+}
+
 export async function authLogout(): Promise<AuthLogoutResponse> {
   const { data } = await http.post<AuthLogoutResponse>('/auth/logout')
+  return data
+}
+
+export async function fetchAuthProfile(): Promise<AuthActionResponse> {
+  const { data } = await http.get<AuthActionResponse>('/auth/profile')
+  return data
+}
+
+export async function updateAuthProfile(payload: {
+  nickname?: string
+  username?: string
+}): Promise<AuthActionResponse> {
+  const { data } = await http.put<AuthActionResponse>('/auth/profile', payload)
+  return data
+}
+
+export async function setAuthPassword(payload: { password: string }): Promise<AuthActionResponse> {
+  const { data } = await http.post<AuthActionResponse>('/auth/profile/set-password', payload)
+  return data
+}
+
+export async function changeAuthPassword(payload: {
+  old_password: string
+  new_password: string
+}): Promise<AuthActionResponse> {
+  const { data } = await http.post<AuthActionResponse>('/auth/profile/change-password', payload)
   return data
 }
 
@@ -419,6 +466,7 @@ export async function runPipeline(params: {
   date?: string
   sllm?: number | null
   zo?: string
+  force?: boolean
   // Arxiv 检索参数
   days?: number | null
   categories?: string | null
@@ -452,6 +500,7 @@ export async function updateScheduleConfig(config: {
   pipeline?: string
   sllm?: number | null
   zo?: string
+  user_id?: number | null
 }): Promise<{ ok: boolean; schedule: ScheduleConfig }> {
   const { data } = await http.post<{ ok: boolean; schedule: ScheduleConfig }>('/admin/schedule', config)
   return data
@@ -647,6 +696,36 @@ export async function applyPromptConfig(configId: number, variableName: string):
   return data
 }
 
+export interface BatchApplyItem_Llm {
+  config_id: number
+  prefix: string
+}
+
+export interface BatchApplyItem_Prompt {
+  config_id: number
+  variable: string
+}
+
+export interface BatchApplyConfigResponse {
+  ok: boolean
+  message: string
+  applied_count: number
+  errors: string[]
+  config: Record<string, any>
+}
+
+/** 批量应用模型配置和提示词配置（一次性写入） */
+export async function batchApplyConfigs(
+  llmApplies: BatchApplyItem_Llm[],
+  promptApplies: BatchApplyItem_Prompt[],
+): Promise<BatchApplyConfigResponse> {
+  const { data } = await http.post<BatchApplyConfigResponse>('/admin/config/batch-apply', {
+    llm_applies: llmApplies,
+    prompt_applies: promptApplies,
+  })
+  return data
+}
+
 // ---------------------------------------------------------------------------
 // User LLM Presets API
 // ---------------------------------------------------------------------------
@@ -722,5 +801,319 @@ export async function updateUserPromptPreset(presetId: number, preset: Partial<U
 /** 删除提示词预设 */
 export async function deleteUserPromptPreset(presetId: number): Promise<{ ok: boolean }> {
   const { data } = await http.delete<{ ok: boolean }>(`/user/prompt-presets/${presetId}`)
+  return data
+}
+
+// ---------------------------------------------------------------------------
+// Idea Generation v2 API (灵感生成)
+// ---------------------------------------------------------------------------
+
+import type {
+  IdeaAtom,
+  IdeaCandidate,
+  IdeaPlan,
+  IdeaFeedback,
+  IdeaExemplar,
+  IdeaBenchmark,
+  IdeaPromptVersion,
+} from '../types/paper'
+
+// -- Atoms --
+
+export interface IdeaAtomsResponse { ok: boolean; atoms: IdeaAtom[] }
+export interface IdeaAtomResponse { ok: boolean; atom: IdeaAtom }
+
+export async function fetchIdeaAtoms(params?: {
+  paper_id?: string; atom_type?: string; query?: string; limit?: number; offset?: number
+}): Promise<IdeaAtomsResponse> {
+  const { data } = await http.get<IdeaAtomsResponse>('/idea/atoms', { params })
+  return data
+}
+
+export async function fetchIdeaAtom(atomId: number): Promise<IdeaAtomResponse> {
+  const { data } = await http.get<IdeaAtomResponse>(`/idea/atoms/${atomId}`)
+  return data
+}
+
+export async function updateIdeaAtom(atomId: number, payload: Partial<IdeaAtom>): Promise<IdeaAtomResponse> {
+  const { data } = await http.put<IdeaAtomResponse>(`/idea/atoms/${atomId}`, payload)
+  return data
+}
+
+export async function deleteIdeaAtom(atomId: number): Promise<{ ok: boolean }> {
+  const { data } = await http.delete<{ ok: boolean }>(`/idea/atoms/${atomId}`)
+  return data
+}
+
+// -- Candidates --
+
+export interface IdeaCandidatesResponse { ok: boolean; candidates: IdeaCandidate[] }
+export interface IdeaCandidateResponse { ok: boolean; candidate: IdeaCandidate }
+
+export async function fetchIdeaCandidates(params?: {
+  status?: string; query?: string; limit?: number; offset?: number
+}): Promise<IdeaCandidatesResponse> {
+  const { data } = await http.get<IdeaCandidatesResponse>('/idea/candidates', { params })
+  return data
+}
+
+export async function fetchIdeaCandidate(candidateId: number): Promise<IdeaCandidateResponse> {
+  const { data } = await http.get<IdeaCandidateResponse>(`/idea/candidates/${candidateId}`)
+  return data
+}
+
+export async function updateIdeaCandidate(candidateId: number, payload: Partial<IdeaCandidate>): Promise<IdeaCandidateResponse> {
+  const { data } = await http.put<IdeaCandidateResponse>(`/idea/candidates/${candidateId}`, payload)
+  return data
+}
+
+export async function deleteIdeaCandidate(candidateId: number): Promise<{ ok: boolean }> {
+  const { data } = await http.delete<{ ok: boolean }>(`/idea/candidates/${candidateId}`)
+  return data
+}
+
+export async function generateIdeas(payload: {
+  question_id?: number; target_paper_ids?: string[]; strategy?: string; input_atom_ids?: number[]
+}): Promise<{ ok: boolean; message: string }> {
+  const { data } = await http.post<{ ok: boolean; message: string }>('/idea/generate', payload)
+  return data
+}
+
+export async function reviewIdeaCandidate(candidateId: number, payload: {
+  action: 'approve' | 'reject' | 'revise'; feedback?: string; scores?: Record<string, number>
+}): Promise<{ ok: boolean; message: string }> {
+  const { data } = await http.post<{ ok: boolean; message: string }>(`/idea/candidates/${candidateId}/review`, payload)
+  return data
+}
+
+// -- Plans --
+
+export interface IdeaPlanResponse { ok: boolean; plan: IdeaPlan }
+
+export async function fetchIdeaPlan(candidateId: number): Promise<IdeaPlanResponse> {
+  const { data } = await http.get<IdeaPlanResponse>(`/idea/plans/${candidateId}`)
+  return data
+}
+
+export async function createIdeaPlan(candidateId: number, payload: Partial<IdeaPlan>): Promise<IdeaPlanResponse> {
+  const { data } = await http.post<IdeaPlanResponse>(`/idea/plans`, { candidate_id: candidateId, ...payload })
+  return data
+}
+
+export function streamGeneratePlan(candidateId: number): EventSource {
+  // Returns a fetch-based SSE stream for plan generation
+  // Caller should use fetch() directly for SSE with POST
+  throw new Error('Use fetchGeneratePlanStream instead')
+}
+
+export async function fetchGeneratePlanStream(
+  candidateId: number,
+  onChunk: (text: string) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  const token = localStorage.getItem('token') || sessionStorage.getItem('token') || ''
+  const response = await fetch('/api/idea/plans/generate', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({ candidate_id: candidateId }),
+    signal,
+  })
+  if (!response.ok) {
+    const text = await response.text()
+    throw new Error(`生成失败 (${response.status}): ${text}`)
+  }
+  const reader = response.body?.getReader()
+  if (!reader) throw new Error('无法读取响应流')
+  const decoder = new TextDecoder()
+  let buffer = ''
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buffer += decoder.decode(value, { stream: true })
+    const lines = buffer.split('\n')
+    buffer = lines.pop() || ''
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue
+      const payload = line.slice(6).trim()
+      if (payload === '[DONE]') return
+      try {
+        onChunk(JSON.parse(payload) as string)
+      } catch {
+        onChunk(payload)
+      }
+    }
+  }
+}
+
+export async function updateIdeaPlan(planId: number, payload: Partial<IdeaPlan>): Promise<IdeaPlanResponse> {
+  const { data } = await http.put<IdeaPlanResponse>(`/idea/plans/${planId}`, payload)
+  return data
+}
+
+export async function deleteIdeaPlan(planId: number): Promise<{ ok: boolean }> {
+  const { data } = await http.delete<{ ok: boolean }>(`/idea/plans/${planId}`)
+  return data
+}
+
+// -- Feedback --
+
+export interface IdeaFeedbackResponse { ok: boolean; feedback: IdeaFeedback }
+export interface IdeaFeedbackListResponse { ok: boolean; feedback_events: IdeaFeedback[] }
+
+export async function createIdeaFeedback(payload: {
+  candidate_id?: number; atom_id?: number; action: string; context?: Record<string, any>
+}): Promise<IdeaFeedbackResponse> {
+  const { data } = await http.post<IdeaFeedbackResponse>('/idea/feedback', payload)
+  return data
+}
+
+
+export async function fetchIdeaFeedback(params?: {
+  event_type?: string; candidate_id?: number; atom_id?: number; limit?: number; offset?: number
+}): Promise<IdeaFeedbackListResponse> {
+  const { data } = await http.get<IdeaFeedbackListResponse>('/idea/feedback', { params })
+  return data
+}
+
+// -- Exemplars --
+
+export interface IdeaExemplarsResponse { ok: boolean; exemplars: IdeaExemplar[] }
+export interface IdeaExemplarResponse { ok: boolean; exemplar: IdeaExemplar }
+
+export async function fetchIdeaExemplars(params?: {
+  query?: string; limit?: number; offset?: number
+}): Promise<IdeaExemplarsResponse> {
+  const { data } = await http.get<IdeaExemplarsResponse>('/idea/exemplars', { params })
+  return data
+}
+
+export async function fetchIdeaExemplar(exemplarId: number): Promise<IdeaExemplarResponse> {
+  const { data } = await http.get<IdeaExemplarResponse>(`/idea/exemplars/${exemplarId}`)
+  return data
+}
+
+export async function createIdeaExemplar(payload: {
+  candidate_id: number; name: string; description?: string; tags?: string[]
+}): Promise<IdeaExemplarResponse> {
+  const { data } = await http.post<IdeaExemplarResponse>('/idea/exemplars', payload)
+  return data
+}
+
+export async function updateIdeaExemplar(exemplarId: number, payload: Partial<IdeaExemplar>): Promise<IdeaExemplarResponse> {
+  const { data } = await http.put<IdeaExemplarResponse>(`/idea/exemplars/${exemplarId}`, payload)
+  return data
+}
+
+export async function deleteIdeaExemplar(exemplarId: number): Promise<{ ok: boolean }> {
+  const { data } = await http.delete<{ ok: boolean }>(`/idea/exemplars/${exemplarId}`)
+  return data
+}
+
+// -- Benchmarks --
+
+export interface IdeaBenchmarksResponse { ok: boolean; benchmarks: IdeaBenchmark[] }
+export interface IdeaBenchmarkResponse { ok: boolean; benchmark: IdeaBenchmark }
+
+export async function fetchIdeaBenchmarks(params?: {
+  query?: string; limit?: number; offset?: number
+}): Promise<IdeaBenchmarksResponse> {
+  const { data } = await http.get<IdeaBenchmarksResponse>('/idea/benchmarks', { params })
+  return data
+}
+
+export async function fetchIdeaBenchmark(benchmarkId: number): Promise<IdeaBenchmarkResponse> {
+  const { data } = await http.get<IdeaBenchmarkResponse>(`/idea/benchmarks/${benchmarkId}`)
+  return data
+}
+
+export async function createIdeaBenchmark(payload: {
+  name: string; description?: string; questions?: string[]; expected_outputs?: string[]
+}): Promise<IdeaBenchmarkResponse> {
+  const { data } = await http.post<IdeaBenchmarkResponse>('/idea/benchmarks', payload)
+  return data
+}
+
+export async function updateIdeaBenchmark(benchmarkId: number, payload: Partial<IdeaBenchmark>): Promise<IdeaBenchmarkResponse> {
+  const { data } = await http.put<IdeaBenchmarkResponse>(`/idea/benchmarks/${benchmarkId}`, payload)
+  return data
+}
+
+export async function deleteIdeaBenchmark(benchmarkId: number): Promise<{ ok: boolean }> {
+  const { data } = await http.delete<{ ok: boolean }>(`/idea/benchmarks/${benchmarkId}`)
+  return data
+}
+
+// -- Prompt Templates --
+
+export interface IdeaPromptVersionsResponse { ok: boolean; templates: IdeaPromptVersion[] }
+export interface IdeaPromptVersionResponse { ok: boolean; template: IdeaPromptVersion }
+
+export async function fetchIdeaPromptVersions(params?: {
+  template_type?: string; name?: string; is_active?: boolean; limit?: number; offset?: number
+}): Promise<IdeaPromptVersionsResponse> {
+  const { data } = await http.get<IdeaPromptVersionsResponse>('/idea/prompt-templates', { params })
+  return data
+}
+
+export async function fetchIdeaPromptVersion(templateId: number): Promise<IdeaPromptVersionResponse> {
+  const { data } = await http.get<IdeaPromptVersionResponse>(`/idea/prompt-templates/${templateId}`)
+  return data
+}
+
+export async function createIdeaPromptVersion(payload: {
+  name: string; template_type: string; content: string; version?: number; is_active?: boolean
+}): Promise<IdeaPromptVersionResponse> {
+  const { data } = await http.post<IdeaPromptVersionResponse>('/idea/prompt-templates', payload)
+  return data
+}
+
+export async function updateIdeaPromptVersion(templateId: number, payload: Partial<IdeaPromptVersion>): Promise<IdeaPromptVersionResponse> {
+  const { data } = await http.put<IdeaPromptVersionResponse>(`/idea/prompt-templates/${templateId}`, payload)
+  return data
+}
+
+export async function deleteIdeaPromptVersion(templateId: number): Promise<{ ok: boolean }> {
+  const { data } = await http.delete<{ ok: boolean }>(`/idea/prompt-templates/${templateId}`)
+  return data
+}
+
+// -- Stats --
+
+export interface IdeaStatsResponse {
+  ok: boolean
+  stats: {
+    total_atoms: number
+    total_candidates: number
+    total_approved: number
+    total_archived: number
+    total_plans: number
+    total_exemplars: number
+    total_benchmarks: number
+    atoms_by_type: Record<string, number>
+    candidates_by_status: Record<string, number>
+  }
+}
+
+export async function fetchIdeaStats(): Promise<IdeaStatsResponse> {
+  const { data } = await http.get<IdeaStatsResponse>('/idea/stats')
+  return data
+}
+
+// -- Idea Digest (permission-filtered, date-scoped) --
+
+export interface IdeaDigestResponse {
+  ok: boolean
+  candidates: import('../types/paper').IdeaCandidate[]
+  total_available: number
+  quota_limit: number | null
+  tier: string
+}
+
+/** 获取指定日期的灵感推荐（按用户配额过滤来源论文） */
+export async function fetchIdeaDigest(date: string): Promise<IdeaDigestResponse> {
+  const { data } = await http.get<IdeaDigestResponse>(`/idea/digest/${date}`)
   return data
 }

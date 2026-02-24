@@ -55,6 +55,7 @@ const emit = defineEmits<{
   refresh: []
   openCompareResult: [resultId: number]
   refreshCompare: []
+  toggleSidebar: []
 }>()
 
 // ---- Folder expand/collapse state ----
@@ -489,6 +490,12 @@ function openNoteMenu(e: MouseEvent, note: KbNote) {
 
 function onNoteClick(note: KbNote) {
   if (note.type === 'link' && note.file_url) {
+    // 检测内部论文链接（/papers/xxx），在右侧面板打开而非新标签页
+    const internalPaperMatch = note.file_url.match(/^\/papers\/(.+)$/)
+    if (internalPaperMatch) {
+      emit('openPaper', internalPaperMatch[1])
+      return
+    }
     window.open(note.file_url, '_blank')
   } else if (note.type === 'file' && note.file_path) {
     const isPdf =
@@ -540,7 +547,7 @@ defineExpose({ refreshAllExpandedNotes, updateNoteTitle })
 </script>
 
 <template>
-  <aside class="w-72 h-full bg-bg-sidebar border-r border-border flex flex-col shrink-0">
+        <aside class="w-[80vw] max-w-[320px] lg:w-72 h-full bg-bg-sidebar border-r border-border flex flex-col shrink-0">
     <!-- Hidden file input for uploads -->
     <input
       ref="fileInputRef"
@@ -550,7 +557,18 @@ defineExpose({ refreshAllExpandedNotes, updateNoteTitle })
     />
 
     <!-- Header: date selector -->
-    <div class="p-4 border-b border-border">
+    <div class="p-4 border-b border-border relative">
+      <!-- Collapse toggle button (top-right of sidebar header) -->
+      <button
+        class="absolute top-3 right-3 w-7 h-7 flex items-center justify-center rounded-full bg-bg-hover text-text-muted hover:text-text-primary hover:bg-bg-elevated border-none cursor-pointer transition-colors z-10"
+        title="收起侧边栏"
+        @click="emit('toggleSidebar')"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="15 18 9 12 15 6"/>
+        </svg>
+      </button>
+
       <div class="bg-gradient-to-r from-[#fd267a] to-[#ff6036] rounded-xl p-3 mb-3">
         <div class="text-xs font-bold text-white/80 mb-1">论文日报</div>
         <select

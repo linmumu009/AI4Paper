@@ -1,0 +1,198 @@
+@import "tailwindcss";
+
+@theme {
+  /* Tinder-inspired dark palette */
+  --color-bg: #000000;
+  --color-bg-card: #1a1a1a;
+  --color-bg-sidebar: #111111;
+  --color-bg-elevated: #222222;
+  --color-bg-hover: #2a2a2a;
+
+  --color-text-primary: #ffffff;
+  --color-text-secondary: #a0a0a0;
+  --color-text-muted: #666666;
+
+  --color-border: #2a2a2a;
+  --color-border-light: #333333;
+
+  /* Tinder action colors */
+  --color-tinder-pink: #ff4458;
+  --color-tinder-blue: #2db8e2;
+  --color-tinder-green: #2ee66d;
+  --color-tinder-gold: #f5b731;
+  --color-tinder-purple: #a64dff;
+
+  /* Gradient */
+  --color-gradient-start: #fd267a;
+  --color-gradient-end: #ff6036;
+
+  /* Tag colors */
+  --color-tag-large-bg: rgba(46, 230, 109, 0.15);
+  --color-tag-large-text: #2ee66d;
+  --color-tag-score-high: #2ee66d;
+  --color-tag-score-mid: #f5b731;
+  --color-tag-score-low: #a0a0a0;
+}
+
+/* ===== Light theme overrides ===== */
+[data-theme="light"] {
+  --color-bg: #f5f5f5;
+  --color-bg-card: #ffffff;
+  --color-bg-sidebar: #f0f0f0;
+  --color-bg-elevated: #e8e8e8;
+  --color-bg-hover: #dedede;
+
+  --color-text-primary: #1a1a1a;
+  --color-text-secondary: #555555;
+  --color-text-muted: #888888;
+
+  --color-border: #d5d5d5;
+  --color-border-light: #c0c0c0;
+
+  --color-tag-large-bg: rgba(30, 180, 80, 0.12);
+  --color-tag-large-text: #1a9e4a;
+  --color-tag-score-high: #1a9e4a;
+  --color-tag-score-mid: #c48f00;
+  --color-tag-score-low: #888888;
+}
+
+/* Base */
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  font-family: "Inter", "PingFang SC", "Microsoft YaHei", system-ui, -apple-system, sans-serif;
+  background: var(--color-bg);
+  color: var(--color-text-primary);
+  overflow: hidden;
+  height: 100vh;
+  height: 100dvh;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+  touch-action: manipulation;
+}
+
+#app {
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Safe area padding for notch devices */
+.safe-area-top {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+.safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 2px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--color-border-light); border-radius: 1px; }
+
+/* ===== Card Swipe Animations ===== */
+@keyframes cardSlideIn {
+  from { opacity: 0; transform: scale(0.92) translateY(16px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+@keyframes cardSwipeLeft {
+  to { opacity: 0; transform: translateX(-120%) rotate(-18deg); }
+}
+
+@keyframes cardSwipeRight {
+  to { opacity: 0; transform: translateX(120%) rotate(18deg); }
+}
+
+@keyframes cardSwipeUp {
+  to { opacity: 0; transform: translateY(-120%) scale(0.9); }
+}
+
+.card-enter {
+  animation: cardSlideIn 0.3s ease-out forwards;
+}
+
+.card-swipe-left {
+  animation: cardSwipeLeft 0.35s ease-in forwards;
+}
+
+.card-swipe-right {
+  animation: cardSwipeRight 0.35s ease-in forwards;
+}
+
+.card-swipe-up {
+  animation: cardSwipeUp 0.35s ease-in forwards;
+}
+
+/* Gradient text */
+.gradient-text {
+  background: linear-gradient(135deg, var(--color-gradient-start), var(--color-gradient-end));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Institution badge (SwipeCard) */
+.institution-badge {
+  display: inline-block;
+  padding: 4px 14px;
+  border-radius: 9999px;
+  font-size: 15px;
+  font-weight: 300;
+  letter-spacing: 0.04em;
+  font-family: "Noto Serif SC", "Source Han Serif SC", Georgia, serif;
+  font-style: italic;
+  color: #fff;
+  background: linear-gradient(135deg, var(--color-gradient-start) 0%, var(--color-gradient-end) 100%);
+}
+
+/* Institution badge mini (KB paper list) */
+.institution-badge-mini {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 9999px;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: #fff;
+  background: linear-gradient(135deg, var(--color-gradient-start) 0%, var(--color-gradient-end) 100%);
+  white-space: nowrap;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.6;
+}
+
+/* Line clamp utility */
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* ===== Page transitions ===== */
+.page-slide-enter-active,
+.page-slide-leave-active {
+  transition: transform 0.3s ease, opacity 0.3s ease;
+}
+.page-slide-enter-from {
+  transform: translateX(100%);
+  opacity: 0;
+}
+.page-slide-leave-to {
+  transform: translateX(-30%);
+  opacity: 0;
+}
+
+/* Fade */
+.fade-enter-active, .fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+.fade-enter-from, .fade-leave-to {
+  opacity: 0;
+}

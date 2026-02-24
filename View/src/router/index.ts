@@ -14,6 +14,45 @@ const router = createRouter({
       name: 'inspiration',
       component: () => import('../views/PaperList.vue'),
     },
+    // ---------------------------------------------------------------------------
+    // Idea Generation v2 routes (灵感生成)
+    // ---------------------------------------------------------------------------
+    {
+      path: '/workbench',
+      name: 'workbench',
+      component: () => import('../views/WorkbenchView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/idea',
+      redirect: '/workbench',
+    },
+    {
+      path: '/idea/candidates/:id',
+      name: 'idea-detail',
+      component: () => import('../views/IdeaDetailView.vue'),
+      props: true,
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/idea/atoms',
+      name: 'idea-atoms',
+      component: () => import('../views/AtomBrowser.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/idea/exemplars',
+      name: 'idea-exemplars',
+      component: () => import('../views/ExemplarView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/idea/eval',
+      name: 'idea-eval',
+      component: () => import('../views/EvalReplayView.vue'),
+      meta: { requiresAuth: true },
+    },
+    // ---------------------------------------------------------------------------
     {
       path: '/papers/:id',
       name: 'paper-detail',
@@ -44,6 +83,14 @@ const router = createRouter({
       meta: { requiresAuth: true },
     },
     {
+      path: '/admin',
+      redirect: '/admin/users',
+    },
+    {
+      path: '/admin/user',
+      redirect: '/admin/users',
+    },
+    {
       path: '/admin/users',
       name: 'admin-users',
       component: () => import('../views/AdminUsers.vue'),
@@ -53,19 +100,35 @@ const router = createRouter({
 })
 
 router.beforeEach(async (to) => {
+  // 确保认证状态已初始化
   await ensureAuthInitialized()
-  if (!to.meta.requiresAuth) return true
-  if (isAuthenticated.value) return true
-  return {
-    path: '/login',
-    query: { redirect: to.fullPath },
+  
+  // 检查是否需要管理员权限
+  if (to.meta.requiresAdmin) {
+    // 先检查是否已登录
+    if (!isAuthenticated.value) {
+      return {
+        path: '/login',
+        query: { redirect: to.fullPath },
+      }
+    }
+    // 再检查是否有管理员权限
+    if (!isAdmin.value) {
+      return { path: '/' }
+    }
   }
-})
-
-router.beforeEach(async (to) => {
-  if (!to.meta.requiresAdmin) return true
-  if (isAdmin.value) return true
-  return { path: '/' }
+  
+  // 检查是否需要登录
+  if (to.meta.requiresAuth) {
+    if (!isAuthenticated.value) {
+      return {
+        path: '/login',
+        query: { redirect: to.fullPath },
+      }
+    }
+  }
+  
+  return true
 })
 
 export default router
