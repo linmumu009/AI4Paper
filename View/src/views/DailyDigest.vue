@@ -8,7 +8,7 @@ import ComparePanel from '../components/ComparePanel.vue'
 import CompareResultViewer from '../components/CompareResultViewer.vue'
 import NoteEditor from './NoteEditor.vue'
 import PaperDetail from './PaperDetail.vue'
-import { fetchDates, fetchDigest, fetchKbTree, addKbPaper, deleteNote, fetchCompareResultsTree, dismissPaper } from '../api'
+import { fetchDates, fetchDigest, fetchKbTree, addKbPaper, deleteNote, fetchCompareResultsTree, dismissPaper, API_ORIGIN } from '../api'
 import type { PaperSummary, KbTree, KbCompareResultsTree } from '../types/paper'
 import { currentTier, ensureAuthInitialized, isAuthenticated } from '../stores/auth'
 
@@ -21,6 +21,7 @@ const selectedDate = ref('')
 const papers = ref<PaperSummary[]>([])
 const loading = ref(false)
 const error = ref('')
+const errorType = ref<'proxy' | 'server' | 'unknown'>('unknown')
 const totalAvailable = ref<number>(0)
 const quotaLimit = ref<number | null>(null)
 const responseTier = ref<string>('anonymous')
@@ -80,9 +81,8 @@ async function loadCompareTree() {
   } catch {}
 }
 
-// Load dates
-onMounted(async () => {
-  await ensureAuthInitialized()
+// 加载日期列表（可被 retryLoad 复用）
+async function loadDates() {
   try {
     const res = await fetchDates()
     dates.value = res.dates
@@ -90,8 +90,15 @@ onMounted(async () => {
       selectedDate.value = dates.value[0]
     }
   } catch (e: any) {
-    error.value = '获取日期失败'
+    errorType.value = e?.errorType || 'unknown'
+    error.value = e?.message || '获取日期失败'
   }
+}
+
+// Load dates
+onMounted(async () => {
+  await ensureAuthInitialized()
+  await loadDates()
 
   if (isAuthenticated.value) {
     await loadKbTree()
@@ -102,6 +109,7 @@ onMounted(async () => {
 async function loadDigestForDate(date: string, fallbackAuthed = isAuthenticated.value) {
   loading.value = true
   error.value = ''
+  errorType.value = 'unknown'
   try {
     const res = await fetchDigest(date)
     const fetchedPapers = Array.isArray(res.papers) ? res.papers : []
@@ -122,6 +130,7 @@ async function loadDigestForDate(date: string, fallbackAuthed = isAuthenticated.
       })
     }
   } catch (e: any) {
+    errorType.value = e?.errorType || (e?.response ? 'server' : 'unknown')
     error.value = e?.message || '加载失败'
     papers.value = []
     totalAvailable.value = 0
@@ -191,8 +200,13 @@ function onDateChange(event: Event) {
 }
 
 function retryLoad() {
-  if (!selectedDate.value) return
-  loadDigestForDate(selectedDate.value)
+  errorType.value = 'unknown'
+  error.value = ''
+  if (dates.value.length === 0) {
+    loadDates()
+  } else if (selectedDate.value) {
+    loadDigestForDate(selectedDate.value)
+  }
 }
 
 // Actions
@@ -390,8 +404,9 @@ function openPdfFromSidebar(payload: { paperId: string; filePath: string; title:
 
 const pdfViewerSrc = computed(() => {
   if (!viewingPdf.value) return ''
-  const viewerPath = '/static/pdfjs/web/viewer.html'
-  const fileUrl = `/static/kb_files/${viewingPdf.value.filePath}`
+  // 桌面端 pdfjs 和 kb_files 都托管在服务器上，需要加 API_ORIGIN 前缀
+  const viewerPath = `${API_ORIGIN}/static/pdfjs/web/viewer.html`
+  const fileUrl = `${API_ORIGIN}/static/kb_files/${viewingPdf.value.filePath}`
   return `${viewerPath}?file=${encodeURIComponent(fileUrl)}&paperId=${encodeURIComponent(viewingPdf.value.paperId)}`
 })
 
@@ -710,8 +725,14 @@ onBeforeRouteLeave(async (_to, _from, next) => {
         </div>
 
         <!-- Error -->
-        <div v-else-if="error" class="flex flex-col items-center gap-3 text-center">
+        <div v-else-if="error" class="flex flex-col items-center gap-3 text-center px-8">
           <span class="text-tinder-pink text-lg">{{ error }}</span>
+          <p v-if="errorType === 'proxy'" class="text-sm text-text-muted max-w-xs">
+            检测到系统代理可能未启动，请关闭代理程序（如 Clash / V2Ray）或确保代理正常运行后重试
+          </p>
+          <p v-else-if="errorType === 'server'" class="text-sm text-text-muted">
+            服务端出现异常，请稍后再试
+          </p>
           <button
             class="px-4 py-2 rounded-full bg-tinder-pink text-white text-sm font-medium cursor-pointer border-none hover:opacity-90 transition-opacity"
             @click="retryLoad"

@@ -2,7 +2,7 @@
 import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import MarkdownIt from 'markdown-it'
 import type { KbScope } from '../api'
-import { saveCompareResult } from '../api'
+import { saveCompareResult, API_ORIGIN, getSessionToken } from '../api'
 
 const props = defineProps<{
   paperIds: string[]
@@ -60,9 +60,12 @@ async function startStreaming() {
   abortController = new AbortController()
 
   try {
-    const response = await fetch('/api/kb/compare', {
+    const fetchHeaders: Record<string, string> = { 'Content-Type': 'application/json' }
+    const _token = getSessionToken()
+    if (_token) fetchHeaders['Authorization'] = `Bearer ${_token}`
+    const response = await fetch(`${API_ORIGIN}/api/kb/compare`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: fetchHeaders,
       credentials: 'include',
       body: JSON.stringify({
         paper_ids: props.paperIds,

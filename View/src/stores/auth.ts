@@ -1,5 +1,5 @@
 import { computed, reactive } from 'vue'
-import { authLogin, authLoginSms, authLogout, authMe, authRegister, authSendSms, fetchAuthProfile, updateAuthProfile, setAuthPassword, changeAuthPassword } from '../api'
+import { authLogin, authLoginSms, authLogout, authMe, authRegister, authSendSms, fetchAuthProfile, updateAuthProfile, setAuthPassword, changeAuthPassword, clearSessionToken } from '../api'
 import type { AuthUser } from '../types/paper'
 
 const state = reactive<{
@@ -88,6 +88,7 @@ export async function logout() {
   state.loading = true
   try {
     await authLogout()
+    clearSessionToken()
     state.user = null
     state.initialized = true
     state.isNewUser = false

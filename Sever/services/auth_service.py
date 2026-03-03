@@ -399,8 +399,23 @@ def get_user_by_session(session_id: str, touch: bool = True) -> Optional[dict]:
         conn.close()
 
 
+def _extract_session_id(request: Request) -> str:
+    """从 Cookie 或 Authorization header 中提取 session_id。
+
+    优先使用 Cookie（Web 同域场景）；Cookie 不存在时回退到
+    ``Authorization: Bearer <session_id>``（桌面端跨域场景）。
+    """
+    sid = request.cookies.get(SESSION_COOKIE_NAME, "")
+    if sid:
+        return sid
+    auth_header = request.headers.get("authorization", "")
+    if auth_header.lower().startswith("bearer "):
+        return auth_header[7:].strip()
+    return ""
+
+
 def require_user(request: Request) -> dict:
-    session_id = request.cookies.get(SESSION_COOKIE_NAME, "")
+    session_id = _extract_session_id(request)
     user = get_user_by_session(session_id)
     if user is None:
         raise HTTPException(status_code=401, detail="请先登录")

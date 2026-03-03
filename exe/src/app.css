@@ -1,0 +1,10 @@
+/*
+ * Tailwind CSS entry for the Tauri desktop app.
+ *
+ * View/src/style.css contains `@import "tailwindcss"` + @theme definitions.
+ * We import it first so the framework is initialised, then add an explicit
+ * @source so Tailwind scans the View component directory for utility classes
+ * (it lives outside the exe/ project root and won't be auto-detected).
+ */
+@import "../../View/src/style.css";
+@source "../../View/src";

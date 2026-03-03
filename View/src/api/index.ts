@@ -32,14 +32,178 @@ import type {
   SystemConfigUpdateResponse,
 } from '../types/paper'
 
+// In production builds (Tauri exe), VITE_API_BASE provides the remote server
+// origin so all requests use absolute URLs.  In dev mode the Vite proxy
+// forwards /api to the target, avoiding CORS issues entirely.
+//
+// Normalisation rules (applied at runtime so mis-configured .env values are
+// corrected automatically instead of silently breaking all API calls):
+//   1. Trim whitespace
+//   2. Strip trailing slashes   → "https://host.com///" → "https://host.com"
+//   3. Strip accidental /api    → "https://host.com/api" → "https://host.com"
+//      so that baseURL never becomes "…/api/api/…"
+function _normaliseApiBase(raw: string): string {
+  let s = (raw || '').trim().replace(/\/+$/, '') // 1+2: trim & strip trailing slashes
+  if (s.toLowerCase().endsWith('/api')) s = s.slice(0, -4) // 3: strip /api suffix
+  return s
+}
+
+export const API_ORIGIN: string = import.meta.env.PROD
+  ? _normaliseApiBase(import.meta.env.VITE_API_BASE || '')
+  : ''
+
+// Warn early so developers can catch misconfiguration immediately
+if (import.meta.env.PROD && !API_ORIGIN) {
+  console.error(
+    '[AI4Papers] VITE_API_BASE is not configured — all API requests will fail in the ' +
+    'desktop app.  Set VITE_API_BASE=https://your-server.com in exe/.env.production and rebuild.',
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Session token 持久化（桌面端跨域场景使用 Authorization header 代替 Cookie）
+// ---------------------------------------------------------------------------
+const SESSION_TOKEN_KEY = 'ai4papers_session_id'
+
+export function getSessionToken(): string {
+  return localStorage.getItem(SESSION_TOKEN_KEY) || ''
+}
+
+export function setSessionToken(token: string) {
+  if (token) {
+    localStorage.setItem(SESSION_TOKEN_KEY, token)
+  } else {
+    localStorage.removeItem(SESSION_TOKEN_KEY)
+  }
+}
+
+export function clearSessionToken() {
+  localStorage.removeItem(SESSION_TOKEN_KEY)
+}
+
+// ---------------------------------------------------------------------------
+// Tauri IPC bridge —— 桌面端所有 HTTP 请求都走 Rust reqwest，
+// 完全绕过 WebView2 的网络栈（WebView2 无法 fetch 外部域名）。
+// ---------------------------------------------------------------------------
+
+/** Tauri 2 全局 IPC invoke（不依赖 @tauri-apps/api） */
+const _tauriInvoke: ((cmd: string, args?: Record<string, unknown>) => Promise<any>) | null =
+  (window as any).__TAURI_INTERNALS__?.invoke ?? null
+
+/** 是否处于 Tauri 桌面环境 */
+const IS_TAURI = !!API_ORIGIN && !!_tauriInvoke
+
+/**
+ * 自定义 Axios adapter：把请求转发给 Rust 端 `direct_request` 命令。
+ * 返回一个符合 Axios 内部格式的 AxiosResponse。
+ */
+async function tauriAdapter(config: any): Promise<any> {
+  if (!_tauriInvoke) throw new Error('Tauri IPC not available')
+
+  // ---- 拼完整 URL ----
+  let fullUrl: string = config.url || ''
+  if (config.baseURL && !fullUrl.startsWith('http')) {
+    fullUrl = config.baseURL.replace(/\/+$/, '') + '/' + fullUrl.replace(/^\/+/, '')
+  }
+
+  // ---- 处理 query params ----
+  if (config.params) {
+    const qs = new URLSearchParams()
+    for (const [k, v] of Object.entries(config.params)) {
+      if (v !== undefined && v !== null) qs.append(k, String(v))
+    }
+    const qsStr = qs.toString()
+    if (qsStr) fullUrl += (fullUrl.includes('?') ? '&' : '?') + qsStr
+  }
+
+  // ---- 请求头 ----
+  const headers: Record<string, string> = {}
+  if (config.headers) {
+    // Axios headers 可能是 AxiosHeaders 对象，遍历时需 toJSON
+    const raw = typeof config.headers.toJSON === 'function' ? config.headers.toJSON() : config.headers
+    for (const [k, v] of Object.entries(raw)) {
+      if (v !== undefined && v !== null && v !== false) headers[k] = String(v)
+    }
+  }
+  // 移除浏览器自动添加的无用头
+  delete headers['User-Agent']
+
+  // ---- body ----
+  let body: string | null = null
+  if (config.data !== undefined && config.data !== null) {
+    body = typeof config.data === 'string' ? config.data : JSON.stringify(config.data)
+    if (!headers['Content-Type'] && !headers['content-type']) {
+      headers['Content-Type'] = 'application/json'
+    }
+  }
+
+  // ---- 调用 Rust direct_request ----
+  const result = await _tauriInvoke('direct_request', {
+    method: (config.method || 'get').toUpperCase(),
+    url: fullUrl,
+    headers,
+    body,
+  })
+
+  // ---- 构造 Axios 兼容响应 ----
+  let responseData: any = result.body
+  const ct = (result.headers?.['content-type'] || '')
+  if (ct.includes('application/json')) {
+    try { responseData = JSON.parse(result.body) } catch { /* keep raw */ }
+  }
+
+  const response = {
+    data: responseData,
+    status: result.status,
+    statusText: '',
+    headers: result.headers || {},
+    config,
+    request: {},  // Axios 内部需要此字段
+  }
+
+  // 非 2xx 状态码时，模拟 Axios 的错误抛出行为
+  if (result.status >= 400) {
+    const error: any = new Error(`Request failed with status code ${result.status}`)
+    error.config = config
+    error.response = response
+    error.isAxiosError = true
+    throw error
+  }
+
+  return response
+}
+
+// ---------------------------------------------------------------------------
+
 const http = axios.create({
-  baseURL: '/api',
+  baseURL: API_ORIGIN ? `${API_ORIGIN}/api` : '/api',
   timeout: 30000,
-  withCredentials: true,
+  withCredentials: !API_ORIGIN,  // web=true (cookie), desktop=false (Bearer)
+  ...(IS_TAURI ? { adapter: tauriAdapter } : {}),
 })
 
+// 请求拦截器：附加 Authorization header（桌面端跨域 Cookie 不可用时的回退）
+http.interceptors.request.use((config) => {
+  const token = getSessionToken()
+  if (token && !config.headers['Authorization']) {
+    config.headers['Authorization'] = `Bearer ${token}`
+  }
+  return config
+})
+
+// 响应拦截器：从 auth 登录/短信登录接口响应中提取并保存 session_id
 http.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    const url: string = response.config?.url || ''
+    // 登录 / 短信登录成功时保存 session_id 到 localStorage
+    if (
+      (url.includes('/auth/login') || url.includes('/auth/login/sms')) &&
+      response.data?.session_id
+    ) {
+      setSessionToken(response.data.session_id)
+    }
+    return response
+  },
   (error) => {
     const status = error?.response?.status
     const url: string = error?.config?.url || ''
@@ -51,10 +215,49 @@ http.interceptors.response.use(
   },
 )
 
-/** 获取所有可用日期 */
+// ---------------------------------------------------------------------------
+// 网络层工具：代理绕行直连（仅用于关键只读接口兜底）
+// ---------------------------------------------------------------------------
+
+/**
+ * 判断 axios 错误是否属于网络层失败（非服务端返回的 HTTP 错误）。
+ * 有 response 说明服务端已响应，属于应用/认证错误，不走直连回退。
+ */
+function isNetworkError(e: any): boolean {
+  return !e?.response
+}
+
+/**
+ * 通过 Tauri Rust 命令直接发起 HTTP GET，绕过系统代理。
+ * 使用 Tauri 2 全局 IPC bridge（window.__TAURI_INTERNALS__）
+ * 避免在 View/ 项目引入 @tauri-apps/api 模块依赖。
+ * 仅在 Tauri 生产包（API_ORIGIN 非空）中调用。
+ */
+async function tauriDirectGet(urlPath: string): Promise<any> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const tauriInvoke = (window as any).__TAURI_INTERNALS__?.invoke
+  if (!tauriInvoke) throw new Error('Tauri IPC not available')
+  const body: string = await tauriInvoke('direct_get', { url: `${API_ORIGIN}${urlPath}` })
+  return JSON.parse(body)
+}
+
+/** 获取所有可用日期（含代理异常自动直连回退） */
 export async function fetchDates(): Promise<DatesResponse> {
-  const { data } = await http.get<DatesResponse>('/dates')
-  return data
+  try {
+    const { data } = await http.get<DatesResponse>('/dates')
+    return data
+  } catch (e: any) {
+    if (API_ORIGIN && isNetworkError(e)) {
+      try {
+        return await tauriDirectGet('/api/dates') as DatesResponse
+      } catch {
+        const err: any = new Error('网络连接失败，请检查系统代理是否已关闭或正常运行')
+        err.errorType = 'proxy'
+        throw err
+      }
+    }
+    throw e
+  }
 }
 
 /** 获取某天的论文列表 */
@@ -75,10 +278,23 @@ export async function fetchPaperDetail(paperId: string): Promise<PaperDetailResp
   return data
 }
 
-/** 获取每日摘要 */
+/** 获取每日摘要（含代理异常自动直连回退） */
 export async function fetchDigest(date: string): Promise<DigestResponse> {
-  const { data } = await http.get<DigestResponse>(`/digest/${date}`)
-  return data
+  try {
+    const { data } = await http.get<DigestResponse>(`/digest/${date}`)
+    return data
+  } catch (e: any) {
+    if (API_ORIGIN && isNetworkError(e)) {
+      try {
+        return await tauriDirectGet(`/api/digest/${date}`) as DigestResponse
+      } catch {
+        const err: any = new Error('网络连接失败，请检查系统代理是否已关闭或正常运行')
+        err.errorType = 'proxy'
+        throw err
+      }
+    }
+    throw e
+  }
 }
 
 /** 获取 Pipeline 状态 */
@@ -237,15 +453,35 @@ export async function addNoteLink(
 /** Initiate a streaming comparison analysis of 2-5 KB papers.
  *  Returns a raw Response whose body is an SSE text/event-stream.
  *  Each `data:` line is a JSON-encoded string chunk; the final line is `data: [DONE]`.
+ *
+ *  桌面端：SSE 流通过 Rust direct_request 一次性拿回全部内容再逐行解析。
  */
-export function fetchCompareStream(
+export async function fetchCompareStream(
   paperIds: string[],
   scope: KbScope = 'kb',
 ): Promise<Response> {
-  return fetch('/api/kb/compare', {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  const token = getSessionToken()
+  if (token) headers['Authorization'] = `Bearer ${token}`
+
+  if (IS_TAURI && _tauriInvoke) {
+    // 桌面端走 Rust HTTP 客户端（一次性获取全部 SSE 文本）
+    const result = await _tauriInvoke('direct_request', {
+      method: 'POST',
+      url: `${API_ORIGIN}/api/kb/compare`,
+      headers,
+      body: JSON.stringify({ paper_ids: paperIds, scope }),
+    })
+    return new Response(result.body, {
+      status: result.status,
+      headers: result.headers,
+    })
+  }
+
+  return fetch(`${API_ORIGIN}/api/kb/compare`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    credentials: 'include',
+    headers,
+    credentials: API_ORIGIN ? 'omit' : 'include',
     body: JSON.stringify({ paper_ids: paperIds, scope }),
   })
 }
@@ -911,16 +1147,33 @@ export async function fetchGeneratePlanStream(
   onChunk: (text: string) => void,
   signal?: AbortSignal,
 ): Promise<void> {
-  const token = localStorage.getItem('token') || sessionStorage.getItem('token') || ''
-  const response = await fetch('/api/idea/plans/generate', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    body: JSON.stringify({ candidate_id: candidateId }),
-    signal,
-  })
+  const token = getSessionToken()
+  const hdrs: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  }
+
+  let response: Response
+  if (IS_TAURI && _tauriInvoke) {
+    const result = await _tauriInvoke('direct_request', {
+      method: 'POST',
+      url: `${API_ORIGIN}/api/idea/plans/generate`,
+      headers: hdrs,
+      body: JSON.stringify({ candidate_id: candidateId }),
+    })
+    response = new Response(result.body, {
+      status: result.status,
+      headers: result.headers,
+    })
+  } else {
+    response = await fetch(`${API_ORIGIN}/api/idea/plans/generate`, {
+      method: 'POST',
+      headers: hdrs,
+      credentials: API_ORIGIN ? 'omit' : 'include',
+      body: JSON.stringify({ candidate_id: candidateId }),
+      signal,
+    })
+  }
   if (!response.ok) {
     const text = await response.text()
     throw new Error(`生成失败 (${response.status}): ${text}`)

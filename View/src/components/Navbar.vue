@@ -61,7 +61,39 @@ async function doLogout() {
 <template>
   <nav class="h-12 sm:h-14 flex items-center justify-between px-3 sm:px-5 bg-bg-sidebar border-b border-border">
     <!-- Logo -->
-    <router-link to="/" class="flex items-center gap-2 no-underline shrink-0">
+    <router-link to="/" class="flex items-center gap-1.5 no-underline shrink-0">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"
+           class="w-7 h-7 sm:w-8 sm:h-8 flex-shrink-0" aria-hidden="true">
+        <defs>
+          <linearGradient id="nav-fg" x1="256" y1="273" x2="256" y2="88" gradientUnits="userSpaceOnUse">
+            <stop offset="0%"   stop-color="#fd267a"/>
+            <stop offset="100%" stop-color="#ff6036"/>
+          </linearGradient>
+          <linearGradient id="nav-ig" x1="256" y1="268" x2="256" y2="133" gradientUnits="userSpaceOnUse">
+            <stop offset="0%"   stop-color="#ff8c00" stop-opacity="0.9"/>
+            <stop offset="100%" stop-color="#ffe066" stop-opacity="0.55"/>
+          </linearGradient>
+        </defs>
+        <path d="M148,260 L320,260 L364,304 L364,426 L148,426 Z"
+              fill="rgba(255,255,255,0.12)" stroke="rgba(255,255,255,0.25)" stroke-width="4"/>
+        <path d="M320,260 L364,260 L364,304 Z"
+              fill="rgba(255,255,255,0.05)" stroke="rgba(255,255,255,0.15)" stroke-width="3"/>
+        <rect x="172" y="320" width="114" height="10" rx="5" fill="rgba(255,255,255,0.20)"/>
+        <rect x="172" y="346" width="152" height="10" rx="5" fill="rgba(255,255,255,0.14)"/>
+        <rect x="172" y="372" width="96"  height="10" rx="5" fill="rgba(255,255,255,0.11)"/>
+        <path d="M170,273 C150,243 145,206 158,170 C166,146 182,133 192,146
+                 C200,156 197,174 206,168 C214,161 212,140 221,123
+                 C230,105 246,96 256,88 C266,96 282,105 291,123
+                 C300,140 298,161 306,168 C315,174 312,156 320,146
+                 C330,133 346,146 354,170 C367,206 362,243 342,273 Z"
+              fill="url(#nav-fg)"/>
+        <path d="M210,268 C198,244 195,214 206,188 C213,170 227,162 233,174
+                 C237,183 234,197 241,193 C248,188 245,170 253,154
+                 C256,145 256,136 256,133 C256,136 256,145 259,154
+                 C267,170 264,188 271,193 C278,197 275,183 279,174
+                 C285,162 299,170 306,188 C317,214 314,244 302,268 Z"
+              fill="url(#nav-ig)" opacity="0.65"/>
+      </svg>
       <span class="text-lg sm:text-xl gradient-text font-bold tracking-tight">AI4Papers</span>
     </router-link>
 
@@ -83,6 +115,18 @@ async function doLogout() {
 
     <!-- Right auth area -->
     <div class="flex items-center justify-end gap-2 shrink-0">
+      <!-- Download installer button -->
+      <a
+        href="/api/download/latest-installer"
+        download
+        title="下载客户端安装包"
+        class="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center rounded-full transition-all duration-200 no-underline text-text-muted hover:text-text-secondary hover:bg-bg-hover"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 sm:w-[18px] sm:h-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+        </svg>
+      </a>
+
       <!-- Workbench entry button -->
       <router-link
         to="/workbench"

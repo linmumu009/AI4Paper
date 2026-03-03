@@ -1,7 +1,11 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { login, loginBySms, sendSms } from '../stores/auth'
+import { API_ORIGIN } from '../api'
+
+const _tauriInvoke: ((cmd: string, args?: Record<string, unknown>) => Promise<any>) | null =
+  (window as any).__TAURI_INTERNALS__?.invoke ?? null
 
 const router = useRouter()
 const route = useRoute()
@@ -23,6 +27,63 @@ const smsSending = ref(false)
 const smsError = ref('')
 const countdown = ref(0)
 let countdownTimer: ReturnType<typeof setInterval> | null = null
+
+// ---------------------------------------------------------------------------
+// 网络诊断（仅在桌面端显示，帮助定位连接问题）
+// ---------------------------------------------------------------------------
+const diagShow = ref(!!API_ORIGIN)       // 仅桌面端显示
+const diagStatus = ref('检测中...')
+const diagDetail = ref('')
+
+async function runDiag() {
+  if (!API_ORIGIN) return
+  diagStatus.value = '检测中...'
+  diagDetail.value = ''
+  try {
+    const t0 = Date.now()
+    let status = 0
+    if (_tauriInvoke) {
+      // 桌面端走 Rust HTTP 客户端
+      const result = await _tauriInvoke('direct_request', {
+        method: 'GET',
+        url: `${API_ORIGIN}/api/auth/me`,
+        headers: { Accept: 'application/json' },
+        body: null,
+      })
+      status = result.status
+    } else {
+      const resp = await fetch(`${API_ORIGIN}/api/auth/me`, {
+        method: 'GET',
+        headers: { Accept: 'application/json' },
+      })
+      status = resp.status
+    }
+    const ms = Date.now() - t0
+    if (status >= 200 && status < 500) {
+      diagStatus.value = `✅ 服务器可达 (${ms}ms, HTTP ${status})`
+    } else {
+      diagStatus.value = `⚠️ 服务器返回 ${status} (${ms}ms)`
+    }
+  } catch (err: any) {
+    diagStatus.value = '❌ 无法连接服务器'
+    diagDetail.value = String(err?.message || err)
+  }
+}
+
+onMounted(() => { runDiag() })
+
+// ---------------------------------------------------------------------------
+// 把原始错误格式化为用户可读的文字
+// ---------------------------------------------------------------------------
+function formatError(e: any, fallback: string): string {
+  // 服务器返回的业务错误
+  if (e?.response?.data?.detail) return e.response.data.detail
+  // 有 HTTP 状态码但无 detail
+  if (e?.response?.status) return `服务器错误 (HTTP ${e.response.status})`
+  // 网络层错误（含 CORS 阻断、DNS 失败、超时等）
+  if (e?.message) return `网络错误: ${e.message}`
+  return fallback
+}
 
 function startCountdown() {
   countdown.value = 60
@@ -46,7 +107,7 @@ async function handleSendSms() {
     await sendSms(phone.value.trim())
     startCountdown()
   } catch (e: any) {
-    smsError.value = e?.response?.data?.detail || '发送失败，请稍后重试'
+    smsError.value = formatError(e, '发送失败，请稍后重试')
   } finally {
     smsSending.value = false
   }
@@ -60,7 +121,7 @@ async function handlePasswordLogin() {
     const redirect = (route.query.redirect as string) || '/'
     await router.replace(redirect)
   } catch (e: any) {
-    pwdError.value = e?.response?.data?.detail || '登录失败，请检查用户名和密码'
+    pwdError.value = formatError(e, '登录失败，请检查用户名和密码')
   } finally {
     pwdLoading.value = false
   }
@@ -82,7 +143,7 @@ async function handleSmsLogin() {
       await router.replace(redirect)
     }
   } catch (e: any) {
-    smsError.value = e?.response?.data?.detail || '登录失败，请检查手机号和验证码'
+    smsError.value = formatError(e, '登录失败，请检查手机号和验证码')
   } finally {
     smsLoading.value = false
   }
@@ -206,6 +267,16 @@ async function handleSmsLogin() {
           使用用户名密码注册
         </router-link>
       </p>
+
+      <!-- 桌面端网络诊断 -->
+      <div v-if="diagShow" class="mt-4 p-2 rounded-lg bg-bg border border-border text-[11px] text-text-muted leading-relaxed">
+        <div class="flex items-center justify-between">
+          <span>API: {{ API_ORIGIN || '(未设置)' }}</span>
+          <button class="text-tinder-pink underline" @click="runDiag">重新检测</button>
+        </div>
+        <div>{{ diagStatus }}</div>
+        <div v-if="diagDetail" class="text-red-400 break-all">{{ diagDetail }}</div>
+      </div>
     </div>
   </div>
 </template>

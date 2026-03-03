@@ -9,7 +9,7 @@ import ComparePanel from '../components/ComparePanel.vue'
 import CompareResultViewer from '../components/CompareResultViewer.vue'
 import NoteEditor from './NoteEditor.vue'
 import PaperDetail from './PaperDetail.vue'
-import { fetchDates, fetchKbTree, addKbPaper, deleteNote, fetchCompareResultsTree, fetchIdeaDigest, createIdeaFeedback, addNoteLink, fetchIdeaAtom } from '../api'
+import { fetchDates, fetchKbTree, addKbPaper, deleteNote, fetchCompareResultsTree, fetchIdeaDigest, createIdeaFeedback, addNoteLink, fetchIdeaAtom, API_ORIGIN } from '../api'
 import type { KbTree, KbCompareResultsTree, IdeaCandidate } from '../types/paper'
 import { currentTier, ensureAuthInitialized, isAuthenticated } from '../stores/auth'
 
@@ -94,6 +94,7 @@ watch(
 const ideaCandidates = ref<IdeaCandidate[]>([])
 const ideaLoading = ref(false)
 const ideaError = ref('')
+const ideaErrorType = ref<'proxy' | 'server' | 'unknown'>('unknown')
 const ideaCurrentIndex = ref(0)
 const ideaCardAnimClass = ref('card-enter')
 const ideaHistory = ref<number[]>([])
@@ -131,6 +132,7 @@ async function loadIdeaDigest(date: string) {
   }
   ideaLoading.value = true
   ideaError.value = ''
+  ideaErrorType.value = 'unknown'
   try {
     const res = await fetchIdeaDigest(date)
     ideaCandidates.value = res.candidates
@@ -141,7 +143,8 @@ async function loadIdeaDigest(date: string) {
     ideaHistory.value = []
     ideaCardAnimClass.value = 'card-enter'
   } catch (e: any) {
-    ideaError.value = e?.response?.data?.detail || '加载灵感失败'
+    ideaErrorType.value = e?.errorType || (e?.response ? 'server' : 'unknown')
+    ideaError.value = e?.response?.data?.detail || e?.message || '加载灵感失败'
     ideaCandidates.value = []
   } finally {
     ideaLoading.value = false
@@ -270,8 +273,9 @@ const viewingCompareResultId = ref<number | null>(null)
 
 const pdfViewerSrc = computed(() => {
   if (!viewingPdf.value) return ''
-  const viewerPath = '/static/pdfjs/web/viewer.html'
-  const fileUrl = `/static/kb_files/${viewingPdf.value.filePath}`
+  // 桌面端 pdfjs 和 kb_files 都托管在服务器上，需要加 API_ORIGIN 前缀
+  const viewerPath = `${API_ORIGIN}/static/pdfjs/web/viewer.html`
+  const fileUrl = `${API_ORIGIN}/static/kb_files/${viewingPdf.value.filePath}`
   return `${viewerPath}?file=${encodeURIComponent(fileUrl)}&paperId=${encodeURIComponent(viewingPdf.value.paperId)}`
 })
 
@@ -697,6 +701,12 @@ onBeforeRouteLeave(async (_to, _from, next) => {
         <!-- 加载出错 -->
         <div v-else-if="ideaError" class="flex flex-col items-center gap-3 text-center px-8">
           <span class="text-[#fd267a] text-base">{{ ideaError }}</span>
+          <p v-if="ideaErrorType === 'proxy'" class="text-sm text-text-muted max-w-xs">
+            检测到系统代理可能未启动，请关闭代理程序或确保代理正常运行后重试
+          </p>
+          <p v-else-if="ideaErrorType === 'server'" class="text-sm text-text-muted">
+            服务端出现异常，请稍后再试
+          </p>
           <button
             class="px-4 py-2 rounded-full bg-gradient-to-r from-[#fd267a] to-[#ff6036] text-white text-sm font-medium cursor-pointer border-none hover:opacity-90 transition-opacity"
             @click="ideaRefresh"

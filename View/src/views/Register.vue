@@ -3,6 +3,14 @@ import { ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { login, register, sendSms } from '../stores/auth'
 
+// 把原始错误格式化为用户可读的文字
+function formatError(e: any, fallback: string): string {
+  if (e?.response?.data?.detail) return e.response.data.detail
+  if (e?.response?.status) return `服务器错误 (HTTP ${e.response.status})`
+  if (e?.message) return `网络错误: ${e.message}`
+  return fallback
+}
+
 const router = useRouter()
 const route = useRoute()
 
@@ -47,7 +55,7 @@ async function handleSendSms() {
     await sendSms(phone.value.trim())
     startCountdown()
   } catch (e: any) {
-    smsError.value = e?.response?.data?.detail || '发送失败，请稍后重试'
+    smsError.value = formatError(e, '发送失败，请稍后重试')
   } finally {
     smsSending.value = false
   }
@@ -87,11 +95,11 @@ async function handleRegister() {
     const redirect = (route.query.redirect as string) || '/'
     await router.replace(redirect)
   } catch (e: any) {
-    const detail = e?.response?.data?.detail || ''
+    const detail = formatError(e, '注册失败，请稍后重试')
     if (detail.includes('手机验证失败') || detail.includes('验证码')) {
       submitError.value = detail + '，请返回重新验证'
     } else {
-      submitError.value = detail || '注册失败，请稍后重试'
+      submitError.value = detail
     }
   } finally {
     submitLoading.value = false

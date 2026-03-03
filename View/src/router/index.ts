@@ -1,8 +1,14 @@
-import { createRouter, createWebHistory } from 'vue-router'
+import { createRouter, createWebHistory, createWebHashHistory } from 'vue-router'
 import { ensureAuthInitialized, isAdmin, isAuthenticated } from '../stores/auth'
 
+// In Tauri the frontend is served from a custom protocol (tauri://localhost).
+// WebHashHistory avoids 404s on hard refresh and works without a server-side
+// SPA fallback.  In regular browser mode keep WebHistory for clean URLs.
+const isTauri = typeof import.meta.env.VITE_API_BASE === 'string'
+  && import.meta.env.VITE_API_BASE !== ''
+
 const router = createRouter({
-  history: createWebHistory(),
+  history: isTauri ? createWebHashHistory() : createWebHistory(),
   routes: [
     {
       path: '/',

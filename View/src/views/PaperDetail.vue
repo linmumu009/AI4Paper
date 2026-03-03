@@ -3,7 +3,7 @@ import { ref, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import SummarySection from '../components/SummarySection.vue'
 import AssetsAccordion from '../components/AssetsAccordion.vue'
-import { fetchPaperDetail } from '../api'
+import { fetchPaperDetail, API_ORIGIN } from '../api'
 import type { PaperDetailResponse } from '../types/paper'
 
 const props = defineProps<{
@@ -24,7 +24,8 @@ const showPdfPane = ref(false)
 const pdfViewerError = ref(false)
 
 function buildPdfViewerSrc(pdfUrl: string, paperId: string): string {
-  const viewerPath = '/static/pdfjs/web/viewer.html'
+  // 桌面端 pdfjs 托管在服务器上，需要加 API_ORIGIN 前缀
+  const viewerPath = `${API_ORIGIN}/static/pdfjs/web/viewer.html`
   return `${viewerPath}?file=${encodeURIComponent(pdfUrl)}&paperId=${encodeURIComponent(paperId)}`
 }
 

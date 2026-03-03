@@ -81,8 +81,13 @@ _default_origins = [
     "http://localhost:4173",
     "http://localhost:5174",   # Mobile dev server
     "http://127.0.0.1:5174",  # Mobile dev server
+    "http://localhost:1420",   # Tauri desktop dev server
+    "http://127.0.0.1:1420",  # Tauri desktop dev server
     "http://localhost:8000",
     "http://127.0.0.1:8000",
+    # Tauri desktop app origins (WebView2 on Windows uses tauri:// or https://tauri.localhost)
+    "tauri://localhost",
+    "https://tauri.localhost",
 ]
 _extra_origins_env = os.environ.get("CORS_ORIGINS", "")
 _extra_origins = [o.strip() for o in _extra_origins_env.split(",") if o.strip()]
@@ -112,9 +117,35 @@ if os.path.isdir(_PDFJS_DIR):
     app.mount("/static/pdfjs", StaticFiles(directory=_PDFJS_DIR, html=True), name="pdfjs")
 
 
+# Mount exe_release directory for installer downloads
+_EXE_RELEASE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "exe_release")
+_EXE_RELEASE_DIR = os.path.normpath(_EXE_RELEASE_DIR)
+
+
 # ---------------------------------------------------------------------------
 # API Endpoints
 # ---------------------------------------------------------------------------
+
+
+@app.get("/api/download/latest-installer")
+async def download_latest_installer():
+    """返回 exe_release 文件夹中最新的安装包文件（按修改时间排序）。"""
+    if not os.path.isdir(_EXE_RELEASE_DIR):
+        raise HTTPException(status_code=404, detail="安装包目录不存在")
+    exes = [
+        f for f in os.listdir(_EXE_RELEASE_DIR)
+        if f.lower().endswith((".exe", ".msi", ".dmg", ".pkg", ".deb", ".rpm", ".AppImage"))
+    ]
+    if not exes:
+        raise HTTPException(status_code=404, detail="未找到安装包文件")
+    exes.sort(key=lambda f: os.path.getmtime(os.path.join(_EXE_RELEASE_DIR, f)), reverse=True)
+    latest = exes[0]
+    file_path = os.path.join(_EXE_RELEASE_DIR, latest)
+    return FileResponse(
+        path=file_path,
+        filename=latest,
+        media_type="application/octet-stream",
+    )
 
 class AuthCredentialBody(BaseModel):
     username: str = Field(..., min_length=3, max_length=32)
@@ -245,7 +276,7 @@ def _clear_session_cookie(resp: Response, request: Optional[Request] = None) -> 
 
 
 def _get_optional_user(request: Request) -> Optional[dict]:
-    session_id = request.cookies.get(auth_service.SESSION_COOKIE_NAME, "")
+    session_id = auth_service._extract_session_id(request)
     return auth_service.get_user_by_session(session_id)
 
 
@@ -303,7 +334,7 @@ def api_auth_login_sms(body: SmsLoginBody, request: Request, response: Response)
         user_agent=request.headers.get("user-agent"),
     )
     _set_session_cookie(response, session["session_id"], request=request)
-    return {"ok": True, "user": user, "is_new_user": is_new_user}
+    return {"ok": True, "user": user, "is_new_user": is_new_user, "session_id": session["session_id"]}
 
 
 @app.post("/api/auth/register", summary="Register")
@@ -328,13 +359,13 @@ def api_auth_login(body: AuthCredentialBody, request: Request, response: Respons
         user_agent=request.headers.get("user-agent"),
     )
     _set_session_cookie(response, session["session_id"], request=request)
-    return {"ok": True, "user": user}
+    return {"ok": True, "user": user, "session_id": session["session_id"]}
 
 
 @app.post("/api/auth/logout", summary="Logout")
 def api_auth_logout(request: Request, response: Response):
     """Logout and clear session cookie."""
-    session_id = request.cookies.get(auth_service.SESSION_COOKIE_NAME, "")
+    session_id = auth_service._extract_session_id(request)
     auth_service.delete_session(session_id)
     _clear_session_cookie(response, request=request)
     return {"ok": True}
@@ -343,7 +374,7 @@ def api_auth_logout(request: Request, response: Response):
 @app.get("/api/auth/me", summary="Current user")
 def api_auth_me(request: Request):
     """Return current authenticated user if session exists."""
-    session_id = request.cookies.get(auth_service.SESSION_COOKIE_NAME, "")
+    session_id = auth_service._extract_session_id(request)
     user = auth_service.get_user_by_session(session_id)
     return {"authenticated": user is not None, "user": user}
 
