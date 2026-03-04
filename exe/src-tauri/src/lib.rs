@@ -1,3 +1,4 @@
+use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
@@ -99,10 +100,75 @@ async fn direct_request(
     })
 }
 
+// ---------------------------------------------------------------------------
+// 文件上传命令 —— 处理 multipart/form-data 请求（如知识库附件上传）。
+// 前端将文件内容以 base64 编码传入，Rust 重建 multipart 表单后发送。
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+async fn direct_upload(
+    url: String,
+    headers: std::collections::HashMap<String, String>,
+    file_name: String,
+    file_base64: String,
+    mime_type: String,
+    form_fields: std::collections::HashMap<String, String>,
+) -> Result<DirectResponse, String> {
+    // Decode base64 → raw bytes
+    let bytes = B64.decode(&file_base64).map_err(|e| format!("BASE64_DECODE:{}", e))?;
+
+    // Build multipart form
+    let file_part = reqwest::multipart::Part::bytes(bytes)
+        .file_name(file_name.clone())
+        .mime_str(&mime_type)
+        .map_err(|e| format!("MIME_STR:{}", e))?;
+
+    let mut form = reqwest::multipart::Form::new().part("file", file_part);
+    for (k, v) in &form_fields {
+        form = form.text(k.clone(), v.clone());
+    }
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(120))
+        .build()
+        .map_err(|e| format!("CLIENT_BUILD:{}", e))?;
+
+    let mut builder = client.post(&url).multipart(form);
+    builder = builder.header("User-Agent", "AI4Papers-Desktop/1.0");
+
+    // Apply extra headers (skip Content-Type — reqwest sets it with the boundary)
+    for (k, v) in &headers {
+        let kl = k.to_lowercase();
+        if kl != "content-type" && kl != "user-agent" {
+            builder = builder.header(k.as_str(), v.as_str());
+        }
+    }
+
+    let resp = builder
+        .send()
+        .await
+        .map_err(|e| format!("NETWORK:{}", e))?;
+
+    let status = resp.status().as_u16();
+    let mut resp_headers = std::collections::HashMap::new();
+    for (k, v) in resp.headers().iter() {
+        if let Ok(val) = v.to_str() {
+            resp_headers.insert(k.to_string(), val.to_string());
+        }
+    }
+    let resp_body = resp.text().await.map_err(|e| format!("READ_BODY:{}", e))?;
+
+    Ok(DirectResponse {
+        status,
+        headers: resp_headers,
+        body: resp_body,
+    })
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![direct_get, direct_request])
+        .invoke_handler(tauri::generate_handler![direct_get, direct_request, direct_upload])
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .setup(|app| {
             // ── Debug logging in dev builds ──────────────────────────────────

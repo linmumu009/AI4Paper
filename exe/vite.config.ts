@@ -84,6 +84,7 @@ export default defineConfig(({ mode }) => {
         },
       },
     },
+    publicDir: path.resolve(__dirname, '../View/public'),
     envPrefix: ['VITE_', 'TAURI_'],
     build: {
       target: process.env.TAURI_ENV_PLATFORM === 'windows'
